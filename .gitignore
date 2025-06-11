@@ -3,3 +3,4 @@ CL_RL
 
 # Jupyter 
 *.ipynb
+!notebooks/*.ipynb
