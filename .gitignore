@@ -4,3 +4,6 @@ CL_RL
 # Jupyter 
 *.ipynb
 !notebooks/*.ipynb
+
+# wandb 
+wandb/

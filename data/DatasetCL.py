@@ -1,4 +1,5 @@
 import torch 
+from utils.tensor_utils import convert_batch_to_tensor
 
 class DatasetCL(torch.utils.data.Dataset): 
     def __init__(self, sampler, batch_size: int, k: int = 2): 
@@ -13,7 +14,7 @@ class DatasetCL(torch.utils.data.Dataset):
         self.batch_size = batch_size 
         self.k = k 
 
-        self.batch = self.sampler.sample_batch(batch_size=self.batch_size, k=self.k)
+        self.batch = convert_batch_to_tensor(self.sampler.sample_batch(batch_size=self.batch_size, k=self.k))
     
     def __len__(self): 
         return len(self.batch)
