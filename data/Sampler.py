@@ -1,10 +1,13 @@
 from data.TrajectorySet import TrajectorySet
+from utils.truncated_distributions import truncated_normal
+from utils.truncated_distributions import truncated_laplace
+from utils.truncated_distributions import truncated_exponential
 
 import torch 
-
+import numpy as np
 
 class Sampler(): 
-    def __init__(self, T: TrajectorySet, dist="g"): 
+    def __init__(self, T: TrajectorySet, dist="g", sigma = 15, b = 15, rate = 0.99): 
         """
         T: The Trajectory Set class 
         dist: The distribution used for centering over the anchor state. 
@@ -13,6 +16,12 @@ class Sampler():
 
         self.T = T 
         self.dist = dist
+        
+        # Hyperparameters
+        self.sigma = sigma
+        self.b = b 
+        self.rate = rate  
+
 
     def sample_anchor_state(self, t: list) -> tuple[list, int]: 
         """
@@ -30,6 +39,7 @@ class Sampler():
         s_i = t[idx] 
         return [s_i, idx]
 
+
     def sample_positive_pair(self, t: list, anchor_state: tuple[list, int]) -> tuple[list, int]: 
         """
         Given the same trajectory that s_i was sampled from, 
@@ -41,46 +51,40 @@ class Sampler():
             s_i: The state itself.
             idx: The time step of s_i.
             
-        
         Return: 
-            A tuple containing [s_j, idx]
-            s_j: The state that is sampled, represented as a list of (x,y) coordinates and velocities. 
-            idx: The time step of s_j.    
+            Returns the positive pair's state and state index.
         """
-        std = 15     # we use 15 to replicate the paper's hyperparams 
-        b = 15       # laplace scale hyper param
-        gamma = 0.99 # exponential hyper param 
 
         _, si_idx = anchor_state
 
-        while True: 
-            if self.dist == "u": 
-                # uniform 
-                sj_idx = torch.randint(low=0, high=len(t), size=(1,))
-            elif self.dist == "g": 
-                # gaussian 
-                sj_idx = torch.normal(mean=si_idx, std=std, size=(1,))
-            elif self.dist == "l": 
-                # laplacian
-                sj_idx = torch.distributions.laplace.Laplace(loc=si_idx, scale=b).sample() 
-            elif self.dist == "e": 
-                # exponential 
-                i = int(torch.distributions.exponential.Exponential(rate=gamma).sample()) + 1   # +1 so we don't get an offset of 0
-                sj_idx = si_idx + i 
-            else: 
-                # default to gaussian
-                sj_idx = torch.normal(mean=si_idx, std=std, size=(1,))
+        if self.dist == "u": 
+            # uniform 
+            sj_idx = torch.randint(low=0, high=len(t), size=(1,))
 
-            sj_idx = int(sj_idx) 
+        elif self.dist == "g": 
+            # gaussian 
+            p = truncated_normal(len(t), mu=si_idx, sigma=self.sigma) 
+            sj_idx = np.random.choice(a=len(t), p=p)
+            
+        elif self.dist == "l": 
+            # laplacian
+            p = truncated_laplace(len=len(t), mu=si_idx, b=self.b)
+            sj_idx = np.random.choice(a=len(t), p=p)
 
-            # Ensures we don't choose an index out of range or the same state. 
-            if (sj_idx < len(t)) and (sj_idx > 0) and (sj_idx != si_idx): 
-                break 
+        elif self.dist == "e": 
+            # exponential 
+            p = truncated_exponential(len=len(t), anchor_state_index=si_idx, rate=self.rate)
+            sj_idx = np.random.choice(a=len(t), p=p) 
+
+        else: 
+            # default to gaussian
+            p = truncated_normal(len(t), mu=si_idx, sigma=self.sigma) 
+            sj_idx = np.random.choice(a=len(t), p=p)
         
-        s_j = t[sj_idx] 
-
+        s_j = t[sj_idx]
         return [s_j, sj_idx]
     
+
     def sample_batch(self, batch_size=1024, k=2) -> list[tuple]: 
         """ 
         Creates a batch of anchor states, their positive pairs, and negative pairs. 

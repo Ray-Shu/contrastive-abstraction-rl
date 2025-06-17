@@ -7,3 +7,7 @@ CL_RL
 
 # wandb 
 wandb/
+
+# Models 
+saved_models/ 
+*.ckpt
