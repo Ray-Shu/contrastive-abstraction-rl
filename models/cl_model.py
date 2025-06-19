@@ -8,9 +8,10 @@ import torch.optim as optim
 import pytorch_lightning as pl
 
 class mlpCL(pl.LightningModule): 
-    def __init__(self, lr, weight_decay, temperature=30, max_epochs=1000, h1=256, h2=128, h3=64, h4=32):
+    def __init__(self, lr, weight_decay, temperature=30, max_epochs=1000, h1=256, h2=128, h3=64, h4=32, device = "cpu"):
         super().__init__() # inherit from LightningModule and nn.module 
         self.save_hyperparameters() # save args  
+        self.device_type = device 
 
         self.mlp = nn.Sequential(
             nn.Linear(4, h1), 
@@ -71,4 +72,14 @@ class mlpCL(pl.LightningModule):
     def validation_step(self, batch):
         self.info_nce_loss(batch, mode='val')
 
+    @torch.no_grad() 
+    def get_embeddings(self, dataloader):
+        self.eval() 
+        all_z = [] 
+        for batch in dataloader: 
+            x = torch.cat(batch, dim=0).to(device=self.device_type)
+            z = self.mlp(x)
+            z = F.normalize(z, dim=1)
+            all_z.append(z)
+        return torch.cat(all_z, dim=0)
     
