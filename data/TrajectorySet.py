@@ -12,6 +12,7 @@ class TrajectorySet:
         num_trajectories: the number of trajectories currently in the set. 
         """
         self.dataset = dataset
+        self.total_episodes = dataset.total_episodes 
 
         self.trajectories = {} 
         self.num_trajectories = 0 
@@ -19,6 +20,9 @@ class TrajectorySet:
     def add_trajectory(self, trajectory):
         self.trajectories[self.num_trajectories] = [trajectory, len(trajectory)] 
         self.num_trajectories += 1
+    
+    def get_total_episodes(self): 
+        return self.total_episodes 
     
     def get_num_trajectories(self):
         return self.num_trajectories

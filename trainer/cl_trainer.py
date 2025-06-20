@@ -6,10 +6,12 @@ import torch.utils.data as data
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
 
-def train_cl(cl_model, train_ds, val_ds, batch_size, logger, checkpoint_path, max_epochs=1000, device="cpu", **kwargs):
+def train_cl(cl_model, train_ds, val_ds, batch_size, logger, checkpoint_path, max_epochs=1000, device="cpu", filename= "best_model", **kwargs):
     # Create model checkpoints based on the top5 metric
+    filename = kwargs.pop("filename", filename) 
+    
     checkpoint_callback = ModelCheckpoint(dirpath=checkpoint_path,
-                                      filename="best_model", 
+                                      filename=filename, 
                                       save_top_k=3, 
                                       save_weights_only=True, 
                                       mode="max",

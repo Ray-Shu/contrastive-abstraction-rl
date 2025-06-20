@@ -16,6 +16,7 @@ class Sampler():
 
         self.T = T 
         self.dist = dist
+        self.total_episodes = T.get_total_episodes() 
         
         # Hyperparameters
         self.sigma = sigma
@@ -105,6 +106,10 @@ class Sampler():
 
         # Generate trajectory set 
         n_trajectories = batch_size // k
+
+        if n_trajectories > self.total_episodes: 
+            n_trajectories = self.total_episodes
+            
         self.T.generate_trajectories(n_trajectories= n_trajectories)
 
         for _ in range(batch_size): 
