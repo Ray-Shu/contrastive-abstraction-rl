@@ -9,7 +9,8 @@ def visualize_embeddings(z, method="tsne", title="Embeddings"):
         z = z.detach().cpu().numpy() # change to cpu calculations 
 
     if method == "tsne":
-        projector = TSNE(n_components=2, perplexity=30)
+        perplexity = min(30, len(z) - 1)  
+        projector = TSNE(n_components=2, perplexity=perplexity)
     elif method == "pca":
         projector = PCA(n_components=2)
     else:

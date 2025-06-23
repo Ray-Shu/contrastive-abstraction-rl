@@ -12,3 +12,7 @@ wandb/
 # Models 
 saved_models/ 
 *.ckpt
+
+# py 
+__pycache__
+*.pyc
