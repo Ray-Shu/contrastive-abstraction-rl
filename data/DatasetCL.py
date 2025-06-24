@@ -1,20 +1,28 @@
 import torch 
 from utils.tensor_utils import convert_batch_to_tensor
 class DatasetCL(torch.utils.data.Dataset): 
-    def __init__(self, sampler, batch_size: int, k: int = 2): 
+    def __init__(self, sampler = None, num_state_pairs: int = None, k: int = 2, data=None): 
         """
         sampler: The Sampler class to sample batches. 
-        batch_size: The size of the batch (ie. the number of state pairs)
+        num_state_pairs: The number of state pairs
         k: A hyperparameter that dictates the average number of 
                 positive pairs sampled from the same trajectory. The 
                 lower the number, the lesser the chance of false negatives. 
+        data: If there is an already existing data, and needs to be converted to this datasetCL type. 
         """
-        self.sampler = sampler 
-        self.batch_size = batch_size 
-        self.k = k 
+        if data: 
+            self.pairs = data 
+            self.num_state_pairs = len(self.pairs)
+            self.k = k 
+        else: 
+            assert sampler != None, "Must have a sampler if you don't have a dataset inputted."
+            assert num_state_pairs != None, "Must have a sampled pairs amount if you don't have a dataset inputted."
 
-        anchor, positive = convert_batch_to_tensor(self.sampler.sample_batch(batch_size=self.batch_size, k=self.k))
-        self.pairs = list(zip(anchor, positive))
+            self.sampler = sampler 
+            self.num_state_pairs = num_state_pairs 
+            self.k = k 
+            anchor, positive = convert_batch_to_tensor(self.sampler.sample_batch(batch_size=self.num_state_pairs, k=self.k))
+            self.pairs = list(zip(anchor, positive))
 
     def __len__(self): 
         return len(self.pairs)
