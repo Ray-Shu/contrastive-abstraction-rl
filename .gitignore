@@ -12,7 +12,6 @@ wandb/
 # Models 
 saved_models/ 
 *.ckpt
-!true_reproduce_results_laplacian.ckpt
 
 # py 
 __pycache__
