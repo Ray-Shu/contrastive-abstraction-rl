@@ -1,0 +1,3 @@
+# Enforce MacOS newline format for consistency across devices
+*.py text eol=lf
+*.ipynb text eol=lf

@@ -45,9 +45,9 @@ def main():
 
     T = TrajectorySet(dataset=MINARI_DATASET)
     S = Sampler(T, dist=dist)
-    train_dataset = DatasetCL(S, batch_size=batch_size, k=k)
+    train_dataset = DatasetCL(S, num_sample_pairs=batch_size, k=k)
 
-    val_dataset = DatasetCL(S, batch_size=batch_size, k=k)
+    val_dataset = DatasetCL(S, num_sample_pairs=batch_size, k=k)
 
     model = train_cl(cl_model=mlpCL, 
                     train_ds=train_dataset, 

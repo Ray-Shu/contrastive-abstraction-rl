@@ -35,43 +35,44 @@ class mlpCL(pl.LightningModule):
                                                             eta_min=self.hparams.lr / 50)
         return ([optimizer], [lr_scheduler])
     
-    def info_nce_loss(self, batch, mode='train'):
+    def info_nce_loss(self, batch, mode="train"):
+        # batch is of shape: [N, D]
+        x = torch.cat(batch, dim=0)  # shape: [2N, D]
+
+        z = self.mlp(x)  # [2N, h4]
+        N = z.size(0) // 2
+
+        # normalize vector embedding
+        sim = torch.matmul(z, z.T) / self.hparams.temperature  # cosine sim matrix [2N, 2N]
+
+        # mask diagonals to large negative numbers so we don't calculate same state similarities
+        mask = torch.eye(2 * N, device=sim.device).bool()
+        sim = sim.masked_fill_(mask, -9e15)
+
+        # positives: i-th sample matches i + N mod 2N
+        labels = (torch.arange(2 * N, device=sim.device) + N) % (2 * N)
+
+        loss = F.cross_entropy(sim, labels) # over mean reduction 
         
-        x = torch.cat(batch, dim=0)
+        # extra statistics 
+        if mode=="train": 
+            with torch.no_grad(): 
+                norms = torch.norm(z, dim=1)
+                self.log(f"{mode}/sim_mean", sim.mean(), on_epoch=True)
+                self.log(f"{mode}/sim_std", sim.std(), on_epoch=True)
+                self.log(f"{mode}/z_norm_mean", norms.mean(), on_epoch=True)
+                self.log(f"{mode}/z_norm_std", norms.std(), on_epoch=True)
 
-        # encode states
-        z = self.mlp(x)
+        # metrics
+        preds = sim.argmax(dim=1)
+        top1 = (preds == labels).float().mean()   # top1: true positive is most similar to anchor 
+        top5 = (sim.topk(5, dim=1).indices == labels.unsqueeze(1)).any(dim=1).float().mean() # top5: true positive is atleast in the top 5 most similar to anchor 
 
-        # cos sim matrix
-        cos_sim = F.cosine_similarity(z[:,None,:], z[None,:,:], dim=-1)
+        self.log(f"{mode}/nll_loss", loss, on_epoch=True, prog_bar=True)
+        self.log(f"{mode}/top1", top1, on_epoch=True, prog_bar=True)
+        self.log(f"{mode}/top5", top5, on_epoch=True, prog_bar=True)
 
-        # mask and fill diag with big neg number
-        self_mask = torch.eye(cos_sim.shape[0], dtype=torch.bool, device=cos_sim.device)
-        cos_sim.masked_fill_(self_mask, -9e15)
-
-        # find positive pair -> batch_size//2 away from the original example
-        pos_mask = self_mask.roll(shifts=cos_sim.shape[0]//2, dims=0)
-
-        # infoNCE loss 
-        cos_sim = cos_sim / self.hparams.temperature
-        nll = -cos_sim[pos_mask] + torch.logsumexp(cos_sim, dim=-1)
-        nll = nll.mean()
-
-        # logging loss
-        self.log(f"{mode}/nll_loss", nll)
-        # get ranking position of positive example
-        comb_sim = torch.cat([cos_sim[pos_mask][:,None],  # girst position positive example
-                              cos_sim.masked_fill(pos_mask, -9e15)],
-                             dim=-1)
-        sim_argsort = comb_sim.argsort(dim=-1, descending=True).argmin(dim=-1)
-
-        self.log(f"{mode}/top1", (sim_argsort == 0).float().mean(), on_epoch=True, prog_bar=True) # correct pair
-        self.log(f"{mode}/top5", (sim_argsort < 5).float().mean(), on_epoch=True, prog_bar=True)  # in the top 5 indices for most similar to anchor
-        self.log(f"{mode}/mean_pos", 1+sim_argsort.float().mean(), on_epoch=True, prog_bar=True)  # average index position 
-
-        return nll
-    
-    
+        return loss
     
     def training_step(self, batch):
         return self.info_nce_loss(batch, mode='train')
