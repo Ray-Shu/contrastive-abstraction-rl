@@ -42,7 +42,7 @@ class cmhn():
     def run(self, X, xi, beta=None): 
         """
         Runs the network. 
-        
+
         Args: 
             X: The stored patterns. X is of size [N, d], where N is the number of patterns, and d the size of the patterns. 
             xi: The state pattern (ie. the current pattern being updated). xi is of size [d, 1]. 
@@ -52,6 +52,36 @@ class cmhn():
         """
         assert beta != None, "Must have a value for beta."
 
+        # if xi is of size [d], then change to [d, 1] 
+        if xi.dim() == 1: 
+            xi = xi.unsqueeze(1) #[d, 1]
+        elif xi.dim() == 2 and xi.size(1) != 1: 
+            raise ValueError("Query shape should be [d] or [d, 1].") 
+
         for _ in range(self.update_steps): 
             xi = self.update(X, xi, beta)
         return xi 
+
+    def run_batch(self, X, queries, beta=None): 
+        """
+        Runs the mhn batch-wise for efficient computation. 
+
+        Args: 
+            X: Stored patterns, size [N, d].
+            queries: Input queries, size [N, d].
+            beta: The beta value per sample, size [N].
+        """
+        assert beta != None, "Must have a value for beta." 
+
+        for _ in range(self.update_steps):
+            print("beta", beta)
+            sims = X @ queries.T   # shape [N, N] 
+            print("1",sims)
+            sims = beta.view(-1, 1) * sims    # broadcasting beta. [N, 1] * [N, N] -> [N, N]
+            print("2", sims)
+            probs = F.softmax(sims, dim=0) # calculate probs along patterns (row-wise)
+            print("probs", probs)
+            print("probs size", probs.size() )
+
+            return probs.T @ X   
+

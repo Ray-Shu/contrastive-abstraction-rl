@@ -35,6 +35,9 @@ class mlpCL(pl.LightningModule):
                                                             eta_min=self.hparams.lr / 50)
         return ([optimizer], [lr_scheduler])
     
+    def forward(self, batch): 
+        return self.mlp(batch)
+
     def info_nce_loss(self, batch, mode="train"):
         # batch is of shape: [N, D]
         x = torch.cat(batch, dim=0)  # shape: [2N, D]
