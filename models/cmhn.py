@@ -11,7 +11,7 @@ from torchvision import transforms
 import matplotlib.pyplot as plt 
 
 class cmhn(): 
-    def __init__(self, update_steps = 1):
+    def __init__(self, update_steps = 1, device="cpu"):
         """
         Continuous Modern Hopfield Network 
 
@@ -19,8 +19,9 @@ class cmhn():
             update_steps: The number of iterations the cmhn will do. (Usually just one).
         """
         self.update_steps = update_steps 
+        self.device = torch.device(device)
     
-    def update(self, X, xi, beta): 
+    def __update(self, X, xi, beta): 
         """
         The update rule for a continuous modern hopfield network. 
 
@@ -39,30 +40,7 @@ class cmhn():
         xi_new = X_T @ p  # xi_new, the updated state pattern; size [d, 1]
         return xi_new
 
-    def run(self, X, xi, beta=None): 
-        """
-        Runs the network. 
-
-        Args: 
-            X: The stored patterns. X is of size [N, d], where N is the number of patterns, and d the size of the patterns. 
-            xi: The state pattern (ie. the current pattern being updated). xi is of size [d, 1]. 
-            beta: The scalar inverse-temperature hyperparamater. Controls the number of metastable states that occur in the energy landscape. 
-                - High beta corresponds to low temp, more separation between patterns.  
-                - Low beta corresponds to high temp, less separation (more metastable states). 
-        """
-        assert beta != None, "Must have a value for beta."
-
-        # if xi is of size [d], then change to [d, 1] 
-        if xi.dim() == 1: 
-            xi = xi.unsqueeze(1) #[d, 1]
-        elif xi.dim() == 2 and xi.size(1) != 1: 
-            raise ValueError("Query shape should be [d] or [d, 1].") 
-
-        for _ in range(self.update_steps): 
-            xi = self.update(X, xi, beta)
-        return xi 
-
-    def run_batch(self, X, queries, beta=None): 
+    def __run_batch(self, X, queries, beta=None): 
         """
         Runs the mhn batch-wise for efficient computation. 
 
@@ -74,14 +52,44 @@ class cmhn():
         assert beta != None, "Must have a value for beta." 
 
         for _ in range(self.update_steps):
-            print("beta", beta)
             sims = X @ queries.T   # shape [N, N] 
-            print("1",sims)
             sims = beta.view(-1, 1) * sims    # broadcasting beta. [N, 1] * [N, N] -> [N, N]
-            print("2", sims)
             probs = F.softmax(sims, dim=0) # calculate probs along patterns (row-wise)
-            print("probs", probs)
-            print("probs size", probs.size() )
 
             return probs.T @ X   
+
+    def run(self, X, xi, beta=None, run_as_batch=False): 
+        """
+        Runs the network. 
+
+        Args: 
+            X: The stored patterns. X is of size [N, d], where N is the number of patterns, and d the size of the patterns. 
+            xi: The state pattern (ie. the current pattern being updated). xi is of size [d, 1]. xi can also be a batch of queries [N, d].
+            beta: The scalar inverse-temperature hyperparamater. Controls the number of metastable states that occur in the energy landscape. 
+                - High beta corresponds to low temp, more separation between patterns.  
+                - Low beta corresponds to high temp, less separation (more metastable states). 
+        """
+        assert beta != None, "Must have a value for beta."
+
+        X = X.to(self.device)
+        xi = xi.to(self.device)
+        beta = beta.to(self.device)
+
+        if run_as_batch: 
+            if xi.dim() == 1: 
+                raise ValueError("Query shape should be [N, d] when updating as a batch.")
+            return self.__run_batch(X, xi, beta=beta)
+        
+        else:
+            # if xi is of size [d], then change to [d, 1] 
+            if xi.dim() == 1: 
+                xi = xi.unsqueeze(1) #[d, 1]
+            elif xi.dim() == 2 and xi.size(1) != 1: 
+                raise ValueError("Query shape should be [d] or [d, 1].") 
+
+            for _ in range(self.update_steps): 
+                xi = self.__update(X, xi, beta)
+            return xi 
+
+    
 

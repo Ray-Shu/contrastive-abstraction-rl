@@ -36,6 +36,7 @@ class mlpCL(pl.LightningModule):
         return ([optimizer], [lr_scheduler])
     
     def forward(self, batch): 
+        batch = batch.to(self.device_type)
         return self.mlp(batch)
 
     def info_nce_loss(self, batch, mode="train"):
