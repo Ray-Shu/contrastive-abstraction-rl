@@ -18,4 +18,4 @@ __pycache__
 *.pyc
 
 # misc 
-The Simpsons
+!The Simpsons
