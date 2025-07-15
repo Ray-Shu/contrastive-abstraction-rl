@@ -129,3 +129,44 @@ class Sampler():
             batch.append([s_i, s_j]) 
 
         return batch 
+    
+
+    def sample_states(self, batch_size=1024) -> list[tuple]: 
+        """ 
+        Creates a batch of anchor states, their positive pairs, and negative pairs. 
+        There will be 2(batch_size - 1) amount of negative examples per positive pair.
+
+        Args: 
+            batch_size: The size of the batch to be generated.
+            k: A hyperparameter that dictates the average number of 
+                positive pairs sampled from the same trajectory. The 
+                lower the number, the lesser the chance of false negatives. 
+        
+        Returns: 
+            A list of tuples containing the anchor_state and its positive pair. 
+            The list is the same length as batch_size. 
+        """ 
+
+        batch = [] 
+
+        # Generate trajectory set 
+        n_trajectories = batch_size
+
+        if n_trajectories > self.total_episodes: 
+            n_trajectories = self.total_episodes
+            
+        self.T.generate_trajectories(n_trajectories= n_trajectories)
+
+        for _ in range(batch_size): 
+            # Sample anchor state 
+            rng = torch.randint(low=0, high=n_trajectories, size=(1,)).item() 
+            t = self.T.get_trajectory(index=rng)[0]
+            
+            state = self.sample_anchor_state(t) 
+
+            # Retrieve states; time-steps aren't necessary. 
+            s_i = state[0]
+
+            batch.append(s_i) 
+
+        return batch 
