@@ -1,17 +1,18 @@
 from data.Sampler import Sampler 
 import torch
 
-class RandomSamplingDataset(torch.utils.data.Dataset): 
-    def __init__(self, sampler: Sampler, num_states: int):
+class StatesDataset(torch.utils.data.Dataset): 
+    def __init__(self, cl_model,  sampler: Sampler, num_states: int):
         """
         Creates a dataset with randomly sampled states from the minari dataset specified by the TrajectorySet class. 
         """
+        self.cl_model = cl_model 
 
-        self.states = sampler.sample_states(batch_size=num_states) 
+        states = torch.tensor(sampler.sample_states(batch_size=num_states), dtype=torch.float32)
+        self.z = cl_model(states)
 
     def __len__(self): 
-        return len(self.states) 
+        return len(self.z) 
     
     def __getitem__(self, index):
-        val = self.states[index]
-        return torch.tensor(val, dtype=torch.float32)
+        return self.z[index]
