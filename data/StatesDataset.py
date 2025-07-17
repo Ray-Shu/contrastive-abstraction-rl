@@ -9,7 +9,9 @@ class StatesDataset(torch.utils.data.Dataset):
         self.cl_model = cl_model 
 
         states = torch.tensor(sampler.sample_states(batch_size=num_states), dtype=torch.float32)
-        self.z = cl_model(states)
+
+        with torch.no_grad():
+            self.z = cl_model(states)
 
     def __len__(self): 
         return len(self.z) 

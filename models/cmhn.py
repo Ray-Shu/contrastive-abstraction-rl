@@ -45,26 +45,40 @@ class cmhn():
         Runs the mhn batch-wise for efficient computation. 
 
         Args: 
-            X: Stored patterns, size [N, d].
-            queries: Input queries, size [N, d].
-            beta: The beta value per sample, size [N].
+            X: Stored patterns, size [B, N, d].
+            queries: Input queries, size [B, N, d].
+            beta: The beta value per sample, size [B, N].
         """
+        
+        # DEBUGGING
+        print("X size: ", X.size()) 
+        print("queries size: ", queries.size())
+        
         assert beta != None, "Must have a value for beta." 
+        assert X.shape == queries.shape, "X and queries must be the same shape! (B, N, d)."
 
-        for _ in range(self.update_steps):
-            sims = X @ queries.T   # shape [N, N] 
-            sims = beta.view(-1, 1) * sims    # broadcasting beta. [N, 1] * [N, N] -> [N, N]
-            probs = F.softmax(sims, dim=0) # calculate probs along patterns (row-wise)
+        batch_size = X.size(0)
+        print("batch size: ", batch_size)
 
-            return probs.T @ X   
+        sims = X @ torch.transpose(queries, -2, -1)  # shape [B, N, N] 
+        sims = beta.view(-1, 1) * sims    # broadcasting beta. [N, 1] * [N, N] -> [N, N]
+        print("sims :", sims)
+        print("sims size: ", sims.size())
+        print("beta size", beta.size())
+        probs = F.softmax(sims, dim=0) # calculate probs along patterns (row-wise)
+        print("probs size: ", probs.size())
+        
+        xi_new = torch.transpose(probs, -2, -1) @ X  # calculate updated state patter, size [B, N, d]
+        print("xi_new size:", xi_new.size())
+        return xi_new
 
     def run(self, X, xi, beta=None, run_as_batch=False): 
         """
         Runs the network. 
 
         Args: 
-            X: The stored patterns. X is of size [N, d], where N is the number of patterns, and d the size of the patterns. 
-            xi: The state pattern (ie. the current pattern being updated). xi is of size [d, 1]. xi can also be a batch of queries [N, d].
+            X: The stored patterns. X is of size [B, N, d], where B is the batches, N is the number of patterns, and d the size of the patterns. 
+            xi: The state pattern (ie. the current pattern being updated). xi is of size [B, d, 1]. xi can also be a batch of queries [B, N, d].
             beta: The scalar inverse-temperature hyperparamater. Controls the number of metastable states that occur in the energy landscape. 
                 - High beta corresponds to low temp, more separation between patterns.  
                 - Low beta corresponds to high temp, less separation (more metastable states). 
@@ -78,7 +92,10 @@ class cmhn():
         if run_as_batch: 
             if xi.dim() == 1: 
                 raise ValueError("Query shape should be [N, d] when updating as a batch.")
-            return self.__run_batch(X, xi, beta=beta)
+            
+            for _ in range(self.update_steps): 
+                xi = self.__run_batch(X, xi, beta)
+            return xi
         
         else:
             # if xi is of size [d], then change to [d, 1] 
