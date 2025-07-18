@@ -48,28 +48,29 @@ class cmhn():
             X: Stored patterns, size [B, N, d].
             queries: Input queries, size [B, N, d].
             beta: The beta value per sample, size [B, N].
-        """
-        
-        # DEBUGGING
-        print("X size: ", X.size()) 
-        print("queries size: ", queries.size())
+        """        
         
         assert beta != None, "Must have a value for beta." 
         assert X.shape == queries.shape, "X and queries must be the same shape! (B, N, d)."
 
-        batch_size = X.size(0)
-        print("batch size: ", batch_size)
-
         sims = X @ torch.transpose(queries, -2, -1)  # shape [B, N, N] 
         sims = beta.view(-1, 1) * sims    # broadcasting beta. [N, 1] * [N, N] -> [N, N]
+        
+        probs = F.softmax(sims, dim=0) # calculate probs along patterns (row-wise)
+        
+        xi_new = torch.transpose(probs, -2, -1) @ X  # calculate updated state patter, size [B, N, d]
+
+        # DEBUGGING
+        """print("X size: ", X.size()) 
+        print("queries size: ", queries.size())
+        print("batch size: ", batch_size)
         print("sims :", sims)
         print("sims size: ", sims.size())
         print("beta size", beta.size())
-        probs = F.softmax(sims, dim=0) # calculate probs along patterns (row-wise)
         print("probs size: ", probs.size())
-        
-        xi_new = torch.transpose(probs, -2, -1) @ X  # calculate updated state patter, size [B, N, d]
-        print("xi_new size:", xi_new.size())
+        print("xi_new size:", xi_new.size())"""
+
+
         return xi_new
 
     def run(self, X, xi, beta=None, run_as_batch=False): 

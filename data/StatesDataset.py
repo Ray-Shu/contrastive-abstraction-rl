@@ -4,24 +4,29 @@ import numpy as np
 import minari
 
 class RandomSamplingDataset(torch.utils.data.Dataset): 
-    def __init__(self, cl_model, sampler: Sampler = None,  minari_dataset_id = "D4RL/pointmaze/large-v2", num_states: int = None, iterate_thru_dataset: bool = False):
+    def __init__(self, cl_model,  minari_dataset, iterate_thru_dataset: bool = False, data = None):
         """
         Creates a dataset with randomly sampled states from the minari dataset specified by the TrajectorySet class. 
-        """
-        self.cl_model = cl_model 
-        self.minari_dataset = minari.load_dataset(minari_dataset_id)
-        self.sampler = sampler 
 
-        if iterate_thru_dataset: 
+        Args: 
+            cl_model: The contrastive learning model that changes x to z representations. 
+            minari_dataset: The minari dataset to use. 
+            iterate_thru_dataset: If true, gets all of the states (observations) from the specified minari dataset. 
+            data: If there is existing to data, convert it to this dataset to use with the PyTorch dataloader. Data should be a numpy array. 
+        """
+
+        self.cl_model = cl_model 
+        self.minari_dataset = minari_dataset
+
+        if data is not None: 
+            self.states = torch.as_tensor(data, dtype=torch.float32)
+
+        elif iterate_thru_dataset: 
             self.states = self.__get_all_states()
             self.states = torch.as_tensor(self.states, dtype=torch.float32)
 
-        else: 
-            assert num_states != None, "If iterate_thru_dataset is False, must set num_states to a positive nonzero integer."
-            assert sampler != None, "If iterate_thru_dataset is False, must have a sampler to sample states."
-            self.states = torch.tensor(sampler.sample_states(batch_size=num_states), dtype=torch.float32)
-
-        self.z = cl_model(self.states)
+        with torch.no_grad(): 
+            self.z = cl_model(self.states)
 
     def __len__(self): 
         return len(self.z) 
@@ -44,4 +49,5 @@ class RandomSamplingDataset(torch.utils.data.Dataset):
             states = np.vstack((states, eps[i].observations["observation"]))
 
         return states
+
 
