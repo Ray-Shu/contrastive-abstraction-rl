@@ -3,7 +3,7 @@ import torch
 import numpy as np
 import minari
 
-class RandomSamplingDataset(torch.utils.data.Dataset): 
+class StatesDataset(torch.utils.data.Dataset): 
     def __init__(self, cl_model,  minari_dataset, iterate_thru_dataset: bool = False, data = None):
         """
         Creates a dataset with randomly sampled states from the minari dataset specified by the TrajectorySet class. 

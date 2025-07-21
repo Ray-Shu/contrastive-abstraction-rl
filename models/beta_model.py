@@ -56,6 +56,8 @@ class LearnedBetaModel(pl.LightningModule):
         # get the trial beta 
         beta = self.beta_net(batch)
 
+        beta = beta * self.hparams.beta_max
+
         # get abstract representation 'u' 
         U = self.cmhn.run(batch, batch, beta, run_as_batch=True) 
 
@@ -98,15 +100,16 @@ class LearnedBetaModel(pl.LightningModule):
                 self.log(f"{mode}/sim_std", sim.std(), on_epoch=True)
                 self.log(f"{mode}/p_norm_mean", norms.mean(), on_epoch=True)
                 self.log(f"{mode}/p_norm_std", norms.std(), on_epoch=True)
+                self.log(f"{mode}/beta_mean", beta.mean(), on_epoch=True)
 
         # metrics
         preds = sim.argmax(dim=1)
         top1 = (preds == labels).float().mean()   # top1: true positive is most similar to anchor 
-        top5 = (sim.topk(5, dim=1).indices == labels.unsqueeze(1)).any(dim=1).float().mean() # top5: true positive is atleast in the top 5 most similar to anchor 
+        #top5 = (sim.topk(5, dim=1).indices == labels.unsqueeze(1)).any(dim=1).float().mean() # top5: true positive is atleast in the top 5 most similar to anchor 
 
         self.log(f"{mode}/nll_loss", loss, on_epoch=True, prog_bar=True)
         self.log(f"{mode}/top1", top1, on_epoch=True, prog_bar=True)
-        self.log(f"{mode}/top5", top5, on_epoch=True, prog_bar=True)
+        #self.log(f"{mode}/top5", top5, on_epoch=True, prog_bar=True)
 
         return loss
     
@@ -115,7 +118,3 @@ class LearnedBetaModel(pl.LightningModule):
 
     def validation_step(self, batch):
         self.loss(batch, mode='val')
-
-    def debugging(self): 
-        for name, param in self.beta_net.named_parameters():
-            print(f"{name} device:", param.device)
