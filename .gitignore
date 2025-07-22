@@ -6,6 +6,7 @@ CL_RL
 !notebooks/*.ipynb
 !cl_main.ipynb
 !beta_main.ipynb
+!visuals.ipynb
 
 # wandb 
 wandb/
