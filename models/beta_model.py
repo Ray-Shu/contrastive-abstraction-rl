@@ -109,13 +109,6 @@ class LearnedBetaModel(pl.LightningModule):
         return loss
     
     def training_step(self, batch):
-        print("batch type:", type(batch))
-        if isinstance(batch, torch.Tensor):
-            print("batch shape:", batch.shape)
-            print("batch dtype:", batch.dtype)
-            print("batch mean:", batch.mean().item())
-        else:
-            print("batch contents:", batch)
         return self.loss(batch, mode='train')
 
     def validation_step(self, batch):
