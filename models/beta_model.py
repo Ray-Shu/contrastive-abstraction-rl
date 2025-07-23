@@ -7,7 +7,7 @@ import pytorch_lightning as pl
 
 
 class LearnedBetaModel(pl.LightningModule): 
-    def __init__(self, cmhn, beta_max, lr=1e-3, weight_decay=1e-5, masking_ratio=0.3, max_epochs=1000, input_dim=32, h1=128, h2=32, fc_h1 = 64, device="cpu"):
+    def __init__(self, cmhn, beta_max, lr=1e-3, weight_decay=1e-5, temperature=0.1, masking_ratio=0.3, max_epochs=1000, input_dim=32, h1=128, h2=32, fc_h1 = 64, device="cpu"):
         super().__init__() 
         self.save_hyperparameters()
         self.cmhn = cmhn 
@@ -51,8 +51,6 @@ class LearnedBetaModel(pl.LightningModule):
         Returns: 
             loss: The infoNCE loss. 
         """
-        batch = batch.to(self.device_type)
-
         # get the trial beta 
         beta = self.beta_net(batch)
 
@@ -77,10 +75,7 @@ class LearnedBetaModel(pl.LightningModule):
 
         N = p.size(0) // 2
 
-        # normalize vector embedding
-        p = F.normalize(p, dim=1)
-
-        sim = torch.matmul(p, p.T) # cosine sim matrix [2N, 2N]
+        sim = torch.matmul(p, p.T) / self.hparams.temperature # cosine sim matrix [2N, 2N]
         #print("sim: ", sim)
 
         # mask diagonals to large negative numbers so we don't calculate same state similarities
@@ -114,6 +109,13 @@ class LearnedBetaModel(pl.LightningModule):
         return loss
     
     def training_step(self, batch):
+        print("batch type:", type(batch))
+        if isinstance(batch, torch.Tensor):
+            print("batch shape:", batch.shape)
+            print("batch dtype:", batch.dtype)
+            print("batch mean:", batch.mean().item())
+        else:
+            print("batch contents:", batch)
         return self.loss(batch, mode='train')
 
     def validation_step(self, batch):
