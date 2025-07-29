@@ -36,13 +36,14 @@ def sample_states(dataset, num_states: int = None, save_n_trajectories: int = No
     for i in range(1, total_eps): 
         traj = eps[i].observations["observation"]
 
-        if save_n_trajectories > 0: 
-            traj_len = length_counter + len(traj)
-            d["trajectory_idx"].append(traj_len)
+        if save_n_trajectories != None: 
+            if save_n_trajectories > 0: 
+                traj_len = length_counter + len(traj)
+                d["trajectory_idx"].append(traj_len)
 
-            # update counters
-            length_counter = traj_len
-            save_n_trajectories -= 1
+                # update counters
+                length_counter = traj_len
+                save_n_trajectories -= 1
 
         d["states"] = np.vstack((d["states"], traj))
         if len(d["states"]) > num_states: 

@@ -51,7 +51,7 @@ class TrajectorySet:
             n_trajectories: The number of trajectories to generate. 
         """
         ep_data = self.dataset.sample_episodes(n_episodes=n_trajectories) # sample trajectories
-
+        
         # adds all of the sampled trajectories into the TrajectorySet 
         for i in range(len(ep_data)):
             ep = ep_data[i] 

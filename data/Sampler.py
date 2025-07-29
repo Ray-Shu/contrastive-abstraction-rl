@@ -30,7 +30,7 @@ class Sampler():
         Given a trajectory, we sample the anchor state s_i uniformly. 
 
         Args: 
-            t: The given trajectory we sample from. 
+            t: The index of the specific trajectory to sample from.
 
         Returns: 
             A tuple containing [s_i, idx]
@@ -49,7 +49,7 @@ class Sampler():
         center a gaussian distribution around s_i to get obtain its positve pair: s_j. 
         
         Args: 
-            t: The given trajectory, which must be the same as the trajectory that was used to sample the anchor state. 
+            t_idx: The index to locate a specific trajectory, which must be the same as the trajectory that was used to sample the anchor state. 
             anchor_state: The anchor state; a tuple containing [s_i, idx].
             s_i: The state itself.
             idx: The time step of s_i.
@@ -144,11 +144,7 @@ class Sampler():
             # Sample anchor state 
             t_idx = torch.randint(low=0, high=self.total_episodes, size=(1,)).item() 
         
-            state = self.sample_anchor_state(t_idx) 
-
-            # Retrieve states; time-steps aren't necessary. 
-            s_i = state[0]
-
+            s_i = self.sample_anchor_state(t_idx) 
             batch.append((s_i, t_idx)) 
 
         return batch

@@ -83,15 +83,3 @@ class mlpCL(pl.LightningModule):
 
     def validation_step(self, batch):
         self.info_nce_loss(batch, mode='val')
-
-    @torch.no_grad() 
-    def get_embeddings(self, dataloader):
-        self.eval() 
-        all_z = [] 
-        for batch in dataloader: 
-            x = torch.cat(batch, dim=0).to(device=self.device_type)
-            z = self.mlp(x)
-            z = F.normalize(z, dim=1)
-            all_z.append(z)
-        return torch.cat(all_z, dim=0)
-    
