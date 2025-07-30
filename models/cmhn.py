@@ -32,11 +32,14 @@ class cmhn():
                 - High beta corresponds to low temp, more separation between patterns.  
                 - Low beta corresponds to high temp, less separation (more metastable states). 
         """
-        sims = X @ xi  # simularity between stored patterns and current pattern 
+
+        X_norm = F.normalize(X, p=2, dim=1)
+        xi_norm = F.normalize(xi, p=2, dim=0)
+        sims = X_norm @ xi_norm  # simularity between stored patterns and current pattern 
         p = F.softmax(beta * sims, dim=0, dtype=torch.float32)  # softmax dist along patterns (higher probability => more likely to be that stored pattern)
         # p of size [N, 1] 
 
-        X_T = X.transpose(0, 1) 
+        X_T = X_norm.transpose(0, 1) 
         xi_new = X_T @ p  # xi_new, the updated state pattern; size [d, 1]
         return xi_new
 
@@ -45,13 +48,13 @@ class cmhn():
         Runs the mhn batch-wise for efficient computation. 
 
         Args: 
-            X: Stored patterns, size [B, N, d].
-            queries: Input queries, size [B, N, d].
-            beta: The beta value per sample, size [B, N].
+            X: Stored patterns, size [N, d].
+            queries: Input queries, size [N, d].
+            beta: The beta value per sample, size [N].
         """        
         
         assert beta != None, "Must have a value for beta." 
-        assert X.shape == queries.shape, "X and queries must be the same shape! (B, N, d)."
+        assert X.shape == queries.shape, "X and queries must be the same shape! (N, d)."
 
         sims = X @ torch.transpose(queries, -2, -1)  # shape [B, N, N] 
         sims = beta.view(-1, 1) * sims    # broadcasting beta. [N, 1] * [N, N] -> [N, N]
@@ -78,8 +81,8 @@ class cmhn():
         Runs the network. 
 
         Args: 
-            X: The stored patterns. X is of size [B, N, d], where B is the batches, N is the number of patterns, and d the size of the patterns. 
-            xi: The state pattern (ie. the current pattern being updated). xi is of size [B, d, 1]. xi can also be a batch of queries [B, N, d].
+            X: The stored patterns. X is of size [N, d], where B is the batches, N is the number of patterns, and d the size of the patterns. 
+            xi: The state pattern (ie. the current pattern being updated). xi is of size [d, 1]. xi can also be a batch of queries [N, d].
             beta: The scalar inverse-temperature hyperparamater. Controls the number of metastable states that occur in the energy landscape. 
                 - High beta corresponds to low temp, more separation between patterns.  
                 - Low beta corresponds to high temp, less separation (more metastable states). 
