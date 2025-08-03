@@ -56,12 +56,12 @@ class cmhn():
         assert beta != None, "Must have a value for beta." 
         assert X.shape == queries.shape, "X and queries must be the same shape! (N, d)."
 
-        sims = X @ torch.transpose(queries, -2, -1)  # shape [B, N, N] 
+        sims = X @ torch.transpose(queries, -2, -1)  # shape [N, N] 
         sims = beta.view(-1, 1) * sims    # broadcasting beta. [N, 1] * [N, N] -> [N, N]
         
         probs = F.softmax(sims, dim=0) # calculate probs along patterns (row-wise)
         
-        xi_new = torch.transpose(probs, -2, -1) @ X  # calculate updated state patter, size [B, N, d]
+        xi_new = torch.transpose(probs, -2, -1) @ X  # calculate updated state patter, size [N, d]
 
         # DEBUGGING
         """print("X size: ", X.size()) 
