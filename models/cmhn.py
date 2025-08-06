@@ -1,6 +1,8 @@
 import os
 import sys
 
+import faiss 
+
 from PIL import Image 
 import torch 
 import torch.nn.functional as F
@@ -11,15 +13,35 @@ from torchvision import transforms
 import matplotlib.pyplot as plt 
 
 class cmhn(): 
-    def __init__(self, update_steps = 1, device="cpu"):
+    def __init__(self, update_steps = 1, topk = 256, use_gpu = False, device="cpu"):
         """
         Continuous Modern Hopfield Network 
 
         Args: 
             update_steps: The number of iterations the cmhn will do. (Usually just one).
+            topk: Using faiss, only the top k most similar patterns will be used. (more efficient in batch-wise updates) 
+            use_gpu: Tells faiss if we use faiss-cpu or faiss-gpu for behind the scenes calculations. 
+            device: The device that torch will use. 
         """
         self.update_steps = update_steps 
+        self.topk = topk
+        self.use_gpu = use_gpu
         self.device = torch.device(device)
+        self.index = None 
+
+    def __build_index(self, X, d): 
+        """
+        Builds a faiss index (an object) for efficient searching of top-k patterns from X. 
+        """
+        X_np = X.detach().cpu().numpy().astype("float32") # convert X from tensor to numpy 
+
+        if self.use_gpu: 
+            flat_index = faiss.IndexFlatL2(d) 
+            self.index = faiss.index_cpu_to_all_gpus(flat_index)
+        else: 
+            self.index = faiss.IndexFlatL2(d)
+        
+        self.index.add(X_np)
     
     def __update(self, X, xi, beta): 
         """
@@ -32,7 +54,6 @@ class cmhn():
                 - High beta corresponds to low temp, more separation between patterns.  
                 - Low beta corresponds to high temp, less separation (more metastable states). 
         """
-
         X_norm = F.normalize(X, p=2, dim=1)
         xi_norm = F.normalize(xi, p=2, dim=0)
         sims = X_norm @ xi_norm  # simularity between stored patterns and current pattern 
@@ -55,26 +76,42 @@ class cmhn():
         
         assert beta != None, "Must have a value for beta." 
         assert X.shape == queries.shape, "X and queries must be the same shape! (N, d)."
+        N, d = X.shape 
 
-        sims = X @ torch.transpose(queries, -2, -1)  # shape [N, N] 
-        sims = beta.view(-1, 1) * sims    # broadcasting beta. [N, 1] * [N, N] -> [N, N]
-        
-        probs = F.softmax(sims, dim=0) # calculate probs along patterns (row-wise)
-        
-        xi_new = torch.transpose(probs, -2, -1) @ X  # calculate updated state patter, size [N, d]
+        # normalize for cos sim calcs
+        X_norm = F.normalize(X, p=2, dim=-1)
+        queries_norm = F.normalize(queries, p=2, dim=-1)
+        norms = X_norm.norm(p=2, dim=-1)
 
-        # DEBUGGING
-        """print("X size: ", X.size()) 
-        print("queries size: ", queries.size())
-        print("batch size: ", batch_size)
-        print("sims :", sims)
-        print("sims size: ", sims.size())
-        print("beta size", beta.size())
-        print("probs size: ", probs.size())
-        print("xi_new size:", xi_new.size())"""
+        input = [[X, queries],[X_norm, queries_norm]]
+        res = []
+        # create two xi_news: xi_new, xi_new_norm
+        for i in range(len(input)):
+            self.__build_index(X, d) 
 
+            queries_np = input[i][1].detach().cpu().numpy().astype("float32")
+            distances, indices = self.index.search(queries_np, self.topk)
+            
+            queries = torch.from_numpy(queries_np).to(X.device)
+            indices = torch.from_numpy(indices).to(X.device) # indices of shape [N, topk]
 
-        return xi_new
+            topk_X = input[i][0][indices] # size [N, topk, d] 
+            topk_q = queries.unsqueeze(1) # change queries from [N, d] to [N, 1, d] for broadcasting
+            
+            # dot product of x_ij * q_i along "d dim" to obtain tensor of [N, topk]
+            # q_i represents the i'th query
+            # x_ij represents the corresponding i'th query and j'th pattern, where j is among the topk 
+            # then sum over d to obtain the similarity between row i and col j. 
+            sims = torch.sum(topk_X * topk_q, dim=-1) 
+
+            beta = beta.view(-1, 1)  # beta: [N, 1], broadcasting beta. 
+            sims = beta * sims       # sims * beta: [N, topk]
+            probs = F.softmax(sims, dim=-1) # calculate probs along patterns (NOT queries) ie. along topk --> [N, topk]
+            
+            # weighted sum over topk_X: x_ij * probs_i
+            res.append(torch.sum(probs.unsqueeze(-1) * topk_X, dim=1))
+
+        return res[0], res[1]
 
     def run(self, X, xi, beta=None, run_as_batch=False): 
         """
@@ -88,6 +125,9 @@ class cmhn():
                 - Low beta corresponds to high temp, less separation (more metastable states). 
         """
         assert beta != None, "Must have a value for beta."
+
+        #if not isinstance(beta, torch.Tensor):
+        #   beta = torch.as_tensor(beta, dtype=torch.float32)
 
         X = X.to(self.device)
         xi = xi.to(self.device)
@@ -111,6 +151,5 @@ class cmhn():
             for _ in range(self.update_steps): 
                 xi = self.__update(X, xi, beta)
             return xi 
-
     
 
