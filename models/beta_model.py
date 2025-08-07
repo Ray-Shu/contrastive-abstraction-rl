@@ -57,13 +57,13 @@ class LearnedBetaModel(pl.LightningModule):
         beta = beta * self.hparams.beta_max
 
         # get abstract representation 'u' 
-        U = self.cmhn.run(batch, batch, beta, run_as_batch=True) 
+        U, U_norm = self.cmhn.run(batch, batch, beta, run_as_batch=True) 
 
         # get the noisy batch, nn.Dropout uses scaling=True to maintain expected value of tensor
         z_prime = self.dropout(batch)
 
         # create positive pairs
-        pairs = torch.cat([U, z_prime], dim=0)
+        pairs = torch.cat([U_norm, z_prime], dim=0)
       
         # put new batch pairs into fc_nn to obtain vectors in new embedding space useful for contrastive learning 
         p = self.fc_nn(pairs)
@@ -74,9 +74,14 @@ class LearnedBetaModel(pl.LightningModule):
         ######################################################################
 
         N = p.size(0) // 2
+        p_norm = F.normalize(p, p=2, dim=-1)  # attempt 1: adding normalization to p
 
-        sim = torch.matmul(p, p.T) / self.hparams.temperature # cosine sim matrix [2N, 2N]
-        #print("sim: ", sim)
+        sim = torch.matmul(p_norm, p_norm.T) / self.hparams.temperature # cosine sim matrix [2N, 2N]
+        if mode=="train": 
+            with torch.no_grad():
+                self.log(f"{mode}/sim_mean", sim.mean(), on_epoch=True)
+                self.log(f"{mode}/sim_std", sim.std(), on_epoch=True)
+
 
         # mask diagonals to large negative numbers so we don't calculate same state similarities
         mask = torch.eye(2 * N, device=sim.device).bool()
@@ -90,12 +95,15 @@ class LearnedBetaModel(pl.LightningModule):
         # extra statistics 
         if mode=="train": 
             with torch.no_grad(): 
-                norms = torch.norm(p, dim=1)
-                self.log(f"{mode}/sim_mean", sim.mean(), on_epoch=True)
-                self.log(f"{mode}/sim_std", sim.std(), on_epoch=True)
+                norms = torch.norm(p_norm, dim=1)
                 self.log(f"{mode}/p_norm_mean", norms.mean(), on_epoch=True)
                 self.log(f"{mode}/p_norm_std", norms.std(), on_epoch=True)
                 self.log(f"{mode}/beta_mean", beta.mean(), on_epoch=True)
+
+                u_norms = torch.norm(U_norm, dim=1)
+                self.log(f"{mode}/U_norm_mean", u_norms.mean(), on_epoch=True)
+                self.log(f"{mode}/U_norm_std", u_norms.std(), on_epoch=True)
+                self.log(f"{mode}/U_norm_max", u_norms.max(), on_epoch=True)
 
         # metrics
         preds = sim.argmax(dim=1)
