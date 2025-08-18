@@ -126,8 +126,8 @@ class cmhn():
         """
         assert beta != None, "Must have a value for beta."
 
-        #if not isinstance(beta, torch.Tensor):
-        #   beta = torch.as_tensor(beta, dtype=torch.float32)
+        if not isinstance(beta, torch.Tensor):
+           beta = torch.as_tensor(beta, dtype=torch.float32)
 
         X = X.to(self.device)
         xi = xi.to(self.device)

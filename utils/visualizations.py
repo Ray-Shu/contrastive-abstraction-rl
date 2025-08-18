@@ -25,3 +25,25 @@ def visualize_embeddings(z, method="tsne", title="Embeddings"):
     plt.title(title)
     plt.grid(True)
     plt.show()
+
+def xy_to_grid(xy, x_params, y_params, h, w):
+    """
+    Converts xy coordinates to the top-down grid coordinates.
+    
+    xy: The [x,y] coordinates
+    x_params: The min and max x-values that the agent can take (eg: [-5, 5])
+    y_params: THe min and max y-values that the agent can take (eg: [-5, 5])
+    h: The height of the maze 
+    w: The width of the maze
+    """
+    x_min, x_max = x_params
+    y_min, y_max = y_params
+
+    grid_pts = []
+    for s in xy: 
+        x, y = s
+        col = int((x - x_min) / (x_max - x_min) * w)
+        row = int(h - (y - y_min) / (y_max - y_min) * h)
+        grid_pts.append([row, col])
+
+    return grid_pts

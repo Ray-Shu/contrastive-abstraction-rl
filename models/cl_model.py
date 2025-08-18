@@ -45,9 +45,16 @@ class mlpCL(pl.LightningModule):
 
         z = self.mlp(x)  # [2N, h4]
         N = z.size(0) // 2
-
+        
         # normalize vector embedding
         sim = torch.matmul(z, z.T) / self.hparams.temperature  # cosine sim matrix [2N, 2N]
+
+        # extra statistics 
+        if mode=="train": 
+            with torch.no_grad(): 
+                self.log(f"{mode}/sim_mean", sim.mean(), on_epoch=True)
+                self.log(f"{mode}/sim_std", sim.std(), on_epoch=True)
+                
 
         # mask diagonals to large negative numbers so we don't calculate same state similarities
         mask = torch.eye(2 * N, device=sim.device).bool()
@@ -57,15 +64,6 @@ class mlpCL(pl.LightningModule):
         labels = (torch.arange(2 * N, device=sim.device) + N) % (2 * N)
 
         loss = F.cross_entropy(sim, labels) # over mean reduction 
-        
-        # extra statistics 
-        if mode=="train": 
-            with torch.no_grad(): 
-                norms = torch.norm(z, dim=1)
-                self.log(f"{mode}/sim_mean", sim.mean(), on_epoch=True)
-                self.log(f"{mode}/sim_std", sim.std(), on_epoch=True)
-                self.log(f"{mode}/z_norm_mean", norms.mean(), on_epoch=True)
-                self.log(f"{mode}/z_norm_std", norms.std(), on_epoch=True)
 
         # metrics
         preds = sim.argmax(dim=1)

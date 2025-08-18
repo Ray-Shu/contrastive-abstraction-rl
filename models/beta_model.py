@@ -7,7 +7,7 @@ import pytorch_lightning as pl
 
 
 class LearnedBetaModel(pl.LightningModule): 
-    def __init__(self, cmhn, beta_max, lr=1e-3, weight_decay=1e-5, temperature=0.1, masking_ratio=0.3, max_epochs=1000, input_dim=32, h1=128, h2=32, fc_h1 = 64, device="cpu"):
+    def __init__(self, cmhn, beta_max, lr=1e-3, weight_decay=1e-5, temperature=1, masking_ratio=0.3, max_epochs=1000, input_dim=32, h1=128, h2=32, fc_h1 = 256, fc_h2 = 128, fc_h3 = 64, device="cpu"):
         super().__init__() 
         self.save_hyperparameters()
         self.cmhn = cmhn 
@@ -29,7 +29,14 @@ class LearnedBetaModel(pl.LightningModule):
         self.fc_nn = nn.Sequential( 
             nn.Linear(input_dim, fc_h1),
             nn.ReLU(), 
-            nn.Linear(fc_h1, input_dim)
+
+            nn.Linear(fc_h1, fc_h2), 
+            nn.ReLU(), 
+
+            nn.Linear(fc_h2, fc_h3),
+            nn.ReLU(), 
+
+            nn.Linear(fc_h3, input_dim),
         ).to(self.device_type)
     
     def configure_optimizers(self):
@@ -74,7 +81,7 @@ class LearnedBetaModel(pl.LightningModule):
         ######################################################################
 
         N = p.size(0) // 2
-        p_norm = F.normalize(p, p=2, dim=-1)  # attempt 1: adding normalization to p
+        p_norm = F.normalize(p, p=2, dim=-1)  
 
         sim = torch.matmul(p_norm, p_norm.T) / self.hparams.temperature # cosine sim matrix [2N, 2N]
         if mode=="train": 
@@ -108,11 +115,11 @@ class LearnedBetaModel(pl.LightningModule):
         # metrics
         preds = sim.argmax(dim=1)
         top1 = (preds == labels).float().mean()   # top1: true positive is most similar to anchor 
-        #top5 = (sim.topk(5, dim=1).indices == labels.unsqueeze(1)).any(dim=1).float().mean() # top5: true positive is atleast in the top 5 most similar to anchor 
+        top5 = (sim.topk(5, dim=1).indices == labels.unsqueeze(1)).any(dim=1).float().mean() # top5: true positive is atleast in the top 5 most similar to anchor 
 
         self.log(f"{mode}/nll_loss", loss, on_epoch=True, prog_bar=True)
         self.log(f"{mode}/top1", top1, on_epoch=True, prog_bar=True)
-        #self.log(f"{mode}/top5", top5, on_epoch=True, prog_bar=True)
+        self.log(f"{mode}/top5", top5, on_epoch=True, prog_bar=True)
 
         return loss
     
@@ -121,3 +128,7 @@ class LearnedBetaModel(pl.LightningModule):
 
     def validation_step(self, batch):
         self.loss(batch, mode='val')
+
+    def get_beta(self, batch): 
+        """Returns the beta value."""
+        return self.beta_net(batch)*self.hparams.beta_max
