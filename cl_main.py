@@ -20,7 +20,7 @@ from pytorch_lightning.loggers import WandbLogger
 
 MINARI_DATASET = minari.load_dataset("D4RL/pointmaze/large-v2")
 PROJECT_ROOT = os.getcwd() 
-CHECKPOINT_PATH = PROJECT_ROOT + "/saved_models"
+CHECKPOINT_PATH = os.path.join(PROJECT_ROOT, "models")
 
 PROJECT_NAME = "Contrastive Learning RL"
 RUN_NAME = "cl_model"
@@ -39,7 +39,7 @@ DEFAULT_CONFIG = {
     }
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Train Beta Network with Hopfield Dynamics")
+    parser = argparse.ArgumentParser(description="Train Contrastive Learning")
     parser.add_argument("--distribution", type=str, default=DEFAULT_CONFIG["distribution"])
     parser.add_argument("--num_states", type=int, default=DEFAULT_CONFIG["num_states"])
     parser.add_argument("--lr", type=float, default=DEFAULT_CONFIG["lr"])

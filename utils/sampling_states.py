@@ -12,6 +12,10 @@ def sample_states(dataset, num_states: int = None, save_n_trajectories: int = No
     
     Returns:
         A dictionary containing the indices of where a trajectory ends, and the list of states. 
+        d = {
+            "trajectory_idx": []
+            "states": []
+        }
     """ 
 
     assert dataset != None, "Must have a minari dataset specified!"
@@ -51,3 +55,18 @@ def sample_states(dataset, num_states: int = None, save_n_trajectories: int = No
             return d
 
     return d
+
+def sample_trajectories(dataset, n_episodes=2, ep_len=200, ):
+    """
+    Samples n trajectories that have less than a specified length.
+    
+    dataset argument must be a Minari dataset. 
+    """
+    trajs = []
+    for i in range(n_episodes): 
+        while True: 
+            traj = dataset.sample_episodes(n_episodes=1)
+            if len(traj[0].observations["observation"]) < ep_len: 
+                trajs.append(traj)
+                break
+    return trajs

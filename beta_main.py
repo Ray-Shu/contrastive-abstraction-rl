@@ -31,7 +31,7 @@ faiss.omp_set_num_threads(1)
 # Globals
 MINARI_DATASET = minari.load_dataset("D4RL/pointmaze/large-v2")
 PROJECT_ROOT = os.getcwd()
-CHECKPOINT_PATH = os.path.join(PROJECT_ROOT, "best_models")
+CHECKPOINT_PATH = os.path.join(PROJECT_ROOT, "models")
 
 PROJECT_NAME = "Learning Beta Model"
 RUN_NAME = "beta_model"
@@ -53,7 +53,7 @@ DEFAULT_CONFIG = {
     }
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Train Beta Network with Hopfield Dynamics")
+    parser = argparse.ArgumentParser(description="Train Beta Model")
     parser.add_argument("--num_states", type=int, default=DEFAULT_CONFIG["num_states"])
     parser.add_argument("--lr", type=float, default=DEFAULT_CONFIG["lr"])
     parser.add_argument("--temperature", type=float, default=DEFAULT_CONFIG["temperature"])
