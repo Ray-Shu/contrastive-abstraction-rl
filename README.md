@@ -8,7 +8,7 @@ This project implements the contrastive model, continuous hopfield network, and 
 The implementation uses Minari's D4RL `pointmaze-large` [dataset](https://minari.farama.org/datasets/D4RL/pointmaze/large-v2/).
 
 ## Installation 
-Clone repo and install dependencies. 
+Clone repo and install dependencies. Note that we used python version 3.9.6 to run everything. 
 ```bash
 git clone https://github.com/Ray-Shu/contrastive-abstraction-rl.git
 pip install -r requirements.txt
