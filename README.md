@@ -15,6 +15,13 @@ cd contrastive-abstraction-rl
 pip install -r requirements.txt
 ```
 
+Creating a virtual environment to host these dependencies is recommended. This will create a conda virtual environment. Info on Conda [here](https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html). 
+```bash
+conda create --name myvenv python=3.9.6
+conda activate myvenv
+pip install -r requirements.txt
+```
+
 ## Running the Models
 To run the contrastive learning model: 
 ```bash
