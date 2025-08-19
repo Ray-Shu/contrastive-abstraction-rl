@@ -20,7 +20,11 @@ from pytorch_lightning.loggers import WandbLogger
 
 MINARI_DATASET = minari.load_dataset("D4RL/pointmaze/large-v2")
 PROJECT_ROOT = os.getcwd() 
-CHECKPOINT_PATH = os.path.join(PROJECT_ROOT, "models")
+
+FOLDER_NAME = "cl_model"
+os.makedirs(name=FOLDER_NAME, exist_ok=True)
+
+CHECKPOINT_PATH = os.path.join(PROJECT_ROOT, FOLDER_NAME)
 
 PROJECT_NAME = "Contrastive Learning RL"
 RUN_NAME = "cl_model"
@@ -69,7 +73,7 @@ def main():
     train_batch = int(round(CONFIG["num_states"] * split_val))
     val_batch = int(round(CONFIG["num_states"] * (1 - split_val)))
 
-    print(f"Sampling {CONFIG["num_states"]} states...")
+    print(f'Sampling {CONFIG["num_states"]} states...')
     train_dataset = DatasetCL(S, num_state_pairs=train_batch)
     val_dataset = DatasetCL(S, num_state_pairs=val_batch)
     print("Sampling finished!")

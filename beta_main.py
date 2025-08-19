@@ -31,7 +31,11 @@ faiss.omp_set_num_threads(1)
 # Globals
 MINARI_DATASET = minari.load_dataset("D4RL/pointmaze/large-v2")
 PROJECT_ROOT = os.getcwd()
-CHECKPOINT_PATH = os.path.join(PROJECT_ROOT, "models")
+
+FOLDER_NAME = "beta_models"
+os.makedirs(name=FOLDER_NAME, exist_ok=True)
+
+CHECKPOINT_PATH = os.path.join(PROJECT_ROOT, FOLDER_NAME)
 
 PROJECT_NAME = "Learning Beta Model"
 RUN_NAME = "beta_model"
@@ -95,7 +99,7 @@ def main():
         print("Model not found...")
 
     # Preprocessing step to get train/val data
-    print(f"Sampling {CONFIG["num_states"]} states...")
+    print(f'Sampling {CONFIG["num_states"]} states...')
     data = sample_states(dataset=MINARI_DATASET, num_states=CONFIG["num_states"])
     states = data["states"]
     train, val = split_data(states, split_val=0.8) 
