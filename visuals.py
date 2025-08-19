@@ -11,14 +11,13 @@ import faiss
 from utils import sampling_states
 from utils import pca
 from utils.remove_dupes import remove_dupes
+from utils import visualizations
 
 from models.cl_model import mlpCL
-from data.TrajectorySet import TrajectorySet
-
-
 from models.cmhn import cmhn
 from models.beta_model import LearnedBetaModel
-from utils import visualizations
+
+from data.TrajectorySet import TrajectorySet
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -29,6 +28,23 @@ MINARI_DATASET = minari.load_dataset("D4RL/pointmaze/large-v2")
 PROJECT_ROOT = os.getcwd()
 FOLDER_PATH = "test_plots"
 DEVICE = 'cpu'
+BETA_MODEL_NAME = "beta_model.ckpt"
+MINARI_POINTMAZE_LARGE_MAP = np.array(
+    [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 
+     [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1], 
+     [1, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1], 
+     [1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1], 
+     [1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 0, 1], 
+     [1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1], 
+     [1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1], 
+     [1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1], 
+     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]
+)
+ENV_HEIGHT, ENV_WIDTH = 480, 480 # this comes from env.shape when recreating the maze 2d environment.
+
+# agent coordinate bounds from the minari pointmaze env
+X_BOUND = (-5,5)
+Y_BOUND = (-3.5, 3.5)
 
 DEFAULT_CONFIG = {
     "distribution": "l", 
@@ -67,6 +83,7 @@ def main():
         print("Model not found...")
 
     # Get states from dataset
+    print(f'Sampling {CONFIG["total_states"]} states.')
     states_dict = sampling_states.sample_states(MINARI_DATASET, CONFIG["total_states"],)
     states = states_dict["states"]
 
@@ -108,6 +125,70 @@ def main():
     plt.savefig(file_path)
     plt.close()
     print("Image 2 processed succesfully.")
+
+    #----------------------------------------------------------------------------------------------------------
+    # Clustering the representations
+    #----------------------------------------------------------------------------------------------------------
+    mhn = cmhn(update_steps=1, device=DEVICE)
+
+    # Get beta model
+    pretrained_model_file = os.path.join(PROJECT_ROOT+ "/best_models", BETA_MODEL_NAME) 
+
+    if os.path.isfile(pretrained_model_file): 
+        print(f"Found pretrained model at {pretrained_model_file}, loading...") 
+        beta_model = LearnedBetaModel.load_from_checkpoint(pretrained_model_file, map_location=torch.device(DEVICE))
+    else: 
+        print("Beta model was not found...")
+
+    # Input subsampled states to get learned representations 
+    subsampled_states = states[idx]
+    with torch.no_grad(): 
+        z_reps = model(torch.as_tensor(subsampled_states, dtype=torch.float32))
+        BETA = beta_model.get_beta(z_reps)
+    
+    # Get the u-values (output from hopfield network)
+    u, u_norm = mhn.run(z_reps, z_reps, beta=BETA, run_as_batch=True)
+    
+    # Remove duplicate/similar u-values to obtain cluster points (fixed points)
+    unique_mask = remove_dupes(u_norm, k=1000, threshold=0.5)
+    unique_u = u[unique_mask]
+
+    pca_u = pca.pca_transform(unique_u, pca_dict,  model=model, has_representation=True)
+    plt.plot(figsize=(10,6))
+    plt.scatter(x=subsampled_pca_states[:, 0], y=subsampled_pca_states[:, 1], s=1, c="lightblue", alpha=0.25)
+    plt.scatter(pca_u[:, 0], pca_u[:, 1], s=5, c= "red")
+    plt.title("Cluster Points Overlaid on Representation Space")
+    plt.axis("off")
+    file_path = os.path.join(FOLDER_PATH, "cluster_pts_overlaid_on_reps.png")
+    plt.savefig(file_path)
+    plt.close()
+    print("Image 3 processed succesfully.")
+
+    #----------------------------------------------------------------------------------------------------------
+    # Visualizing Clusters on the Real Maze Environment
+    #----------------------------------------------------------------------------------------------------------
+
+    clustered_states = subsampled_states[unique_mask]
+    cluster_pts = clustered_states[:, :2]
+    grid_points = visualizations.xy_to_grid(cluster_pts, X_BOUND, Y_BOUND, ENV_HEIGHT, ENV_WIDTH)
+    rows, cols = zip(*grid_points)
+
+    fig, axs = plt.subplots(1, 2, figsize=(12,5))
+    axs[0].scatter(subsampled_pca_states[:, 0], subsampled_pca_states[:, 1], s=1, c="lightblue", alpha=0.25)
+    axs[0].scatter(pca_u[:, 0], pca_u[:, 1], s=8, c= "red", alpha=0.5)
+    axs[0].set_title("Learned Representation Space")
+    axs[0].axis("off")
+
+    axs[1].imshow(MINARI_POINTMAZE_LARGE_MAP, cmap="gray_r", origin="upper",
+            extent=[0, ENV_WIDTH, 0, ENV_HEIGHT])
+    axs[1].plot(cols, rows, "ro")  # note cols = x-axis, rows = y-axis
+    axs[1].set_title("Cluster Points Overlaid on Maze (top-down)")
+    axs[1].axis("off")
+    output_path = os.path.join(FOLDER_PATH, "representation_maze.png")
+    fig.savefig(output_path)
+    plt.close(fig)
+    print("Image 4 processed succesfully.")
+    
 
 if __name__ == "__main__": 
     main()

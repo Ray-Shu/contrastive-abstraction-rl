@@ -50,3 +50,14 @@ The beta model also has many flags that can be adjusted:
 --minibatch     # size of the minibatch (default is 4096).
 --cl_model_distribution  #which model to use: [l, g, e, u] (default is the laplace model).
 ```
+
+To run some visualizations: 
+```bash 
+python visuals.py
+```
+Note that the visualizations here are only for the Minari PointMaze dataset linked above, and the environment cannot be changed. These visualizations only serve to show what the four contrastive models (using different distributions to sample positive pairs) and what the beta model can do. However, the model corresponding to its statistical distribution can be changed. 
+```bash
+--distribution      # the model corresponding to the distribution that samples positive pairs; can only choose [l, g, e, u] which corresponds to laplace, gaussian, exponential and uniform (default is l). 
+--subsample_size    # how many states to be shown on the plots (default is 10,000).
+--total_states      # the total number of states to sample, which affects the weights of the PCA (default is one million). 
+```
