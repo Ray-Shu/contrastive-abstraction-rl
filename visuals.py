@@ -19,10 +19,14 @@ from models.beta_model import LearnedBetaModel
 
 from data.TrajectorySet import TrajectorySet
 
+# Resolving some weird faiss issues
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 os.environ["OMP_NUM_THREADS"] = "1"
 torch.set_num_threads(1)
 faiss.omp_set_num_threads(1)
+
+# Solves a faiss issue with macbooks
+sys.modules['faiss.swigfaiss_avx2'] = faiss
 
 MINARI_DATASET = minari.load_dataset("D4RL/pointmaze/large-v2")
 PROJECT_ROOT = os.getcwd()
