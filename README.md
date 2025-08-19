@@ -11,6 +11,7 @@ The implementation uses Minari's D4RL `pointmaze-large` [dataset](https://minari
 Clone repo and install dependencies. Note that we used python version 3.9.6 to run everything. 
 ```bash
 git clone https://github.com/Ray-Shu/contrastive-abstraction-rl.git
+cd contrastive-abstraction-rl
 pip install -r requirements.txt
 ```
 
