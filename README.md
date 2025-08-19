@@ -69,3 +69,7 @@ Note that the visualizations here are only for the Minari PointMaze dataset link
 --subsample_size    # how many states to be shown on the plots (default is 10,000).
 --total_states      # the total number of states to sample, which affects the weights of the PCA (default is one million). 
 ```
+
+## Additional Info
+1. The `best_models` folder has the trained models for the four distributions and the beta network.
+2. The `notebooks` folder holds the prototypes and testing for everything that was written.
