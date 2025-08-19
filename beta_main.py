@@ -72,10 +72,6 @@ def main():
     args = parse_args()
     CONFIG = vars(args)
 
-    # debug statements 
-    print("Using lr:", CONFIG["lr"])
-    print("Using max epochs:", CONFIG["max_epochs"])
-
     # Load cmhn model 
     mhn = cmhn(update_steps=1, device=DEVICE)
 
@@ -99,11 +95,13 @@ def main():
         print("Model not found...")
 
     # Preprocessing step to get train/val data
+    print(f"Sampling {CONFIG["num_states"]} states...")
     data = sample_states(dataset=MINARI_DATASET, num_states=CONFIG["num_states"])
     states = data["states"]
     train, val = split_data(states, split_val=0.8) 
     train_ds = StatesDataset(cl_model=cl_model, minari_dataset=MINARI_DATASET, data=train)
     val_ds = StatesDataset(cl_model=cl_model, minari_dataset=MINARI_DATASET, data=val)
+    print("Sampling finished!")
 
     wandb_logger = WandbLogger(
             project=PROJECT_NAME, 

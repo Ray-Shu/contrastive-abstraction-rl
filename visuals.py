@@ -136,9 +136,11 @@ def main():
 
     if os.path.isfile(pretrained_model_file): 
         print(f"Found pretrained model at {pretrained_model_file}, loading...") 
-        beta_model = LearnedBetaModel.load_from_checkpoint(pretrained_model_file, map_location=torch.device(DEVICE))
-    else: 
-        print("Beta model was not found...")
+        beta_model = LearnedBetaModel.load_from_checkpoint(
+            pretrained_model_file, map_location=torch.device(DEVICE),
+            cmhn = mhn, 
+            device=DEVICE,
+        )
 
     # Input subsampled states to get learned representations 
     subsampled_states = states[idx]
@@ -168,7 +170,23 @@ def main():
     # Visualizing Clusters on the Real Maze Environment
     #----------------------------------------------------------------------------------------------------------
 
-    clustered_states = subsampled_states[unique_mask]
+    # Matching unique_u values to their closest real state (using euclidean distance as the metric)
+    min_dist = float("inf")
+    mask = np.zeros(shape=(10_000), dtype=bool)
+
+    for i in range(unique_u.size(0)):
+        saved_idx = 0
+        min_dist = float('inf')
+        for j in range(len(z_reps)):
+            euclidean_dist = np.linalg.norm(unique_u[i] - z_reps[j])
+            if euclidean_dist < min_dist: 
+                min_dist = euclidean_dist
+                saved_idx = j
+        mask[saved_idx] = True
+
+    clustered_states = subsampled_states[mask]
+    clustered_states.shape
+
     cluster_pts = clustered_states[:, :2]
     grid_points = visualizations.xy_to_grid(cluster_pts, X_BOUND, Y_BOUND, ENV_HEIGHT, ENV_WIDTH)
     rows, cols = zip(*grid_points)

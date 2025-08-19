@@ -55,9 +55,6 @@ def main():
     args = parse_args() 
     CONFIG = vars(args)
 
-    print("dist:", CONFIG["distribution"])
-    print("weight decay:", CONFIG["weight_decay"])
-
     wandb_logger = WandbLogger(
             project=PROJECT_NAME, 
             name=RUN_NAME, 
@@ -72,8 +69,10 @@ def main():
     train_batch = int(round(CONFIG["num_states"] * split_val))
     val_batch = int(round(CONFIG["num_states"] * (1 - split_val)))
 
+    print(f"Sampling {CONFIG["num_states"]} states...")
     train_dataset = DatasetCL(S, num_state_pairs=train_batch)
     val_dataset = DatasetCL(S, num_state_pairs=val_batch)
+    print("Sampling finished!")
 
     model = train_cl(cl_model=mlpCL, 
                 train_ds=train_dataset, 
