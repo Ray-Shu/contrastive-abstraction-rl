@@ -74,4 +74,4 @@ Note that the visualizations here are only for the Minari PointMaze dataset link
 1. The `best_models` folder has the trained models for the four distributions and the beta network.
 2. The `notebooks` folder holds the prototypes and testing for everything that was written.
 
-This [pdf](https://github.com/user-attachments/files/21882859/Reproducing_the__Contrastive_Abstraction_for_Reinforcement_Learning__Paper.pdf) contains in-depth information and mathematical formulas behind this project.
+This downloadable [pdf](https://github.com/user-attachments/files/21882859/Reproducing_the__Contrastive_Abstraction_for_Reinforcement_Learning__Paper.pdf) contains in-depth information and mathematical formulas behind this project.
