@@ -1,15 +1,17 @@
 import torch 
 from utils.tensor_utils import convert_batch_to_tensor
+
+"""
 class DatasetCL(torch.utils.data.Dataset): 
     def __init__(self, sampler = None, num_state_pairs: int = None, k: int = 2, data=None): 
-        """
+        
         sampler: The Sampler class to sample batches. 
         num_state_pairs: The number of state pairs
         k: A hyperparameter that dictates the average number of 
                 positive pairs sampled from the same trajectory. The 
                 lower the number, the lesser the chance of false negatives. 
         data: If there is an already existing data, and needs to be converted to this datasetCL type. 
-        """
+        
         if data: 
             self.pairs = data 
             self.num_state_pairs = len(self.pairs)
@@ -33,3 +35,64 @@ class DatasetCL(torch.utils.data.Dataset):
     
     def get_batch(self):
         return self.pairs
+"""
+
+class DatasetCL(torch.utils.data.Dataset): 
+    def __init__(self, sampler = None, num_state_pairs: int = None): 
+        """
+        sampler: The Sampler class to sample batches. 
+        num_state_pairs: The number of state pairs
+        k: A hyperparameter that dictates the average number of 
+                positive pairs sampled from the same trajectory. The 
+                lower the number, the lesser the chance of false negatives. 
+        """
+     
+        assert sampler != None, "Must have a sampler if you don't have a dataset inputted."
+        assert num_state_pairs != None, "Must have a sampled pairs amount if you don't have a dataset inputted."
+
+        self.sampler = sampler 
+        self.num_state_pairs = num_state_pairs 
+        self.pairs = []
+        self.sample_pairs()
+        
+    def __len__(self): 
+        return len(self.pairs)
+    
+    def __getitem__(self, index):
+        s_i, s_j = self.pairs[index] 
+        return (torch.as_tensor(s_i, dtype=torch.float32), torch.as_tensor(s_j, dtype=torch.float32))
+    
+    def sample_pairs(self): 
+        anchor, positive = convert_batch_to_tensor(self.sampler.sample_batch(batch_size=self.num_state_pairs,))
+        self.pairs = list(zip(anchor, positive))
+
+
+class DatasetCL2(torch.utils.data.Dataset): 
+    def __init__(self, sampler = None, num_state_pairs: int = None): 
+        """
+        sampler: The Sampler class to sample batches. 
+        num_state_pairs: The number of state pairs
+        k: A hyperparameter that dictates the average number of 
+                positive pairs sampled from the same trajectory. The 
+                lower the number, the lesser the chance of false negatives. 
+        """
+     
+        assert sampler != None, "Must have a sampler if you don't have a dataset inputted."
+        assert num_state_pairs != None, "Must have a sampled pairs amount if you don't have a dataset inputted."
+
+        self.sampler = sampler 
+        self.num_state_pairs = num_state_pairs 
+        self.states = self.sampler.sample_states(batch_size = self.num_state_pairs)
+    
+    def __len__(self): 
+        return len(self.states)
+
+    def __getitem__(self, idx): 
+        state, t_idx = self.states[idx]
+        s_j, _ = self.sampler.sample_positive_pair(t_idx, state)
+        s_i = state[0]
+        return (torch.as_tensor(s_i, dtype=torch.float32), torch.as_tensor(s_j, dtype=torch.float32))
+
+    def get_states(self): 
+        return self.states
+ 

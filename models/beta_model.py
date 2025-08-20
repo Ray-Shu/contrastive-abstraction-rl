@@ -7,7 +7,7 @@ import pytorch_lightning as pl
 
 
 class LearnedBetaModel(pl.LightningModule): 
-    def __init__(self, cmhn, beta_max, lr=1e-3, weight_decay=1e-5, masking_ratio=0.3, max_epochs=1000, input_dim=32, h1=128, h2=32, fc_h1 = 64, device="cpu"):
+    def __init__(self, cmhn, beta_max, lr=1e-3, weight_decay=1e-5, temperature=1, masking_ratio=0.3, max_epochs=1000, input_dim=32, h1=128, h2=32, fc_h1 = 256, fc_h2 = 128, fc_h3 = 64, device="cpu"):
         super().__init__() 
         self.save_hyperparameters()
         self.cmhn = cmhn 
@@ -29,7 +29,14 @@ class LearnedBetaModel(pl.LightningModule):
         self.fc_nn = nn.Sequential( 
             nn.Linear(input_dim, fc_h1),
             nn.ReLU(), 
-            nn.Linear(fc_h1, input_dim)
+
+            nn.Linear(fc_h1, fc_h2), 
+            nn.ReLU(), 
+
+            nn.Linear(fc_h2, fc_h3),
+            nn.ReLU(), 
+
+            nn.Linear(fc_h3, input_dim),
         ).to(self.device_type)
     
     def configure_optimizers(self):
@@ -51,21 +58,19 @@ class LearnedBetaModel(pl.LightningModule):
         Returns: 
             loss: The infoNCE loss. 
         """
-        batch = batch.to(self.device_type)
-
         # get the trial beta 
         beta = self.beta_net(batch)
 
         beta = beta * self.hparams.beta_max
 
         # get abstract representation 'u' 
-        U = self.cmhn.run(batch, batch, beta, run_as_batch=True) 
+        U, U_norm = self.cmhn.run(batch, batch, beta, run_as_batch=True) 
 
         # get the noisy batch, nn.Dropout uses scaling=True to maintain expected value of tensor
         z_prime = self.dropout(batch)
 
         # create positive pairs
-        pairs = torch.cat([U, z_prime], dim=0)
+        pairs = torch.cat([U_norm, z_prime], dim=0)
       
         # put new batch pairs into fc_nn to obtain vectors in new embedding space useful for contrastive learning 
         p = self.fc_nn(pairs)
@@ -76,12 +81,14 @@ class LearnedBetaModel(pl.LightningModule):
         ######################################################################
 
         N = p.size(0) // 2
+        p_norm = F.normalize(p, p=2, dim=-1)  
 
-        # normalize vector embedding
-        p = F.normalize(p, dim=1)
+        sim = torch.matmul(p_norm, p_norm.T) / self.hparams.temperature # cosine sim matrix [2N, 2N]
+        if mode=="train": 
+            with torch.no_grad():
+                self.log(f"{mode}/sim_mean", sim.mean(), on_epoch=True)
+                self.log(f"{mode}/sim_std", sim.std(), on_epoch=True)
 
-        sim = torch.matmul(p, p.T) # cosine sim matrix [2N, 2N]
-        #print("sim: ", sim)
 
         # mask diagonals to large negative numbers so we don't calculate same state similarities
         mask = torch.eye(2 * N, device=sim.device).bool()
@@ -95,21 +102,24 @@ class LearnedBetaModel(pl.LightningModule):
         # extra statistics 
         if mode=="train": 
             with torch.no_grad(): 
-                norms = torch.norm(p, dim=1)
-                self.log(f"{mode}/sim_mean", sim.mean(), on_epoch=True)
-                self.log(f"{mode}/sim_std", sim.std(), on_epoch=True)
+                norms = torch.norm(p_norm, dim=1)
                 self.log(f"{mode}/p_norm_mean", norms.mean(), on_epoch=True)
                 self.log(f"{mode}/p_norm_std", norms.std(), on_epoch=True)
                 self.log(f"{mode}/beta_mean", beta.mean(), on_epoch=True)
 
+                u_norms = torch.norm(U_norm, dim=1)
+                self.log(f"{mode}/U_norm_mean", u_norms.mean(), on_epoch=True)
+                self.log(f"{mode}/U_norm_std", u_norms.std(), on_epoch=True)
+                self.log(f"{mode}/U_norm_max", u_norms.max(), on_epoch=True)
+
         # metrics
         preds = sim.argmax(dim=1)
         top1 = (preds == labels).float().mean()   # top1: true positive is most similar to anchor 
-        #top5 = (sim.topk(5, dim=1).indices == labels.unsqueeze(1)).any(dim=1).float().mean() # top5: true positive is atleast in the top 5 most similar to anchor 
+        top5 = (sim.topk(5, dim=1).indices == labels.unsqueeze(1)).any(dim=1).float().mean() # top5: true positive is atleast in the top 5 most similar to anchor 
 
         self.log(f"{mode}/nll_loss", loss, on_epoch=True, prog_bar=True)
         self.log(f"{mode}/top1", top1, on_epoch=True, prog_bar=True)
-        #self.log(f"{mode}/top5", top5, on_epoch=True, prog_bar=True)
+        self.log(f"{mode}/top5", top5, on_epoch=True, prog_bar=True)
 
         return loss
     
@@ -118,3 +128,7 @@ class LearnedBetaModel(pl.LightningModule):
 
     def validation_step(self, batch):
         self.loss(batch, mode='val')
+
+    def get_beta(self, batch): 
+        """Returns the beta value."""
+        return self.beta_net(batch)*self.hparams.beta_max

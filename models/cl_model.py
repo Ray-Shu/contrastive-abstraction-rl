@@ -45,9 +45,16 @@ class mlpCL(pl.LightningModule):
 
         z = self.mlp(x)  # [2N, h4]
         N = z.size(0) // 2
-
+        
         # normalize vector embedding
         sim = torch.matmul(z, z.T) / self.hparams.temperature  # cosine sim matrix [2N, 2N]
+
+        # extra statistics 
+        if mode=="train": 
+            with torch.no_grad(): 
+                self.log(f"{mode}/sim_mean", sim.mean(), on_epoch=True)
+                self.log(f"{mode}/sim_std", sim.std(), on_epoch=True)
+                
 
         # mask diagonals to large negative numbers so we don't calculate same state similarities
         mask = torch.eye(2 * N, device=sim.device).bool()
@@ -57,15 +64,6 @@ class mlpCL(pl.LightningModule):
         labels = (torch.arange(2 * N, device=sim.device) + N) % (2 * N)
 
         loss = F.cross_entropy(sim, labels) # over mean reduction 
-        
-        # extra statistics 
-        if mode=="train": 
-            with torch.no_grad(): 
-                norms = torch.norm(z, dim=1)
-                self.log(f"{mode}/sim_mean", sim.mean(), on_epoch=True)
-                self.log(f"{mode}/sim_std", sim.std(), on_epoch=True)
-                self.log(f"{mode}/z_norm_mean", norms.mean(), on_epoch=True)
-                self.log(f"{mode}/z_norm_std", norms.std(), on_epoch=True)
 
         # metrics
         preds = sim.argmax(dim=1)
@@ -83,15 +81,3 @@ class mlpCL(pl.LightningModule):
 
     def validation_step(self, batch):
         self.info_nce_loss(batch, mode='val')
-
-    @torch.no_grad() 
-    def get_embeddings(self, dataloader):
-        self.eval() 
-        all_z = [] 
-        for batch in dataloader: 
-            x = torch.cat(batch, dim=0).to(device=self.device_type)
-            z = self.mlp(x)
-            z = F.normalize(z, dim=1)
-            all_z.append(z)
-        return torch.cat(all_z, dim=0)
-    

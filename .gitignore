@@ -6,12 +6,14 @@ CL_RL
 !notebooks/*.ipynb
 !cl_main.ipynb
 !beta_main.ipynb
+!visualizations/*.ipynb
 
 # wandb 
 wandb/
 
 # Models 
 saved_models/ 
+saved_beta_models/
 *.ckpt
 !best_models/*.ckpt
 
@@ -20,4 +22,5 @@ __pycache__
 *.pyc
 
 # misc 
-!The Simpsons
+test_plots/
+plots/

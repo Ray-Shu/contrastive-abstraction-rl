@@ -1,9 +1,0 @@
-Siete imágenes de los simpsons en escala de grises para la HP49g
-
-El archivo "The Simpsons.dir" es un directorio que contiene todas
-las 7 imágenes en un formato compreso. (Tiene un tamaño de 13,3 Kb
-en lugar de 29,4 Kb).
-Necesita "GRS64" (no necesita decompresores).
-
-	Jorge Cevallos M.
-	jorge@005.com

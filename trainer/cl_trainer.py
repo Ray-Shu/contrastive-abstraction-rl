@@ -6,16 +6,29 @@ import torch.utils.data as data
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
 
+"""
+ SAMPLING NEW PAIRS PER EPOCH
+class ResamplePairsCallback(pl.Callback):
+    def __init__(self, dataset):
+        self.dataset = dataset 
+    
+    def on_train_epoch_start(self, trainer, pl_module):
+        self.dataset.sample_pairs()
+"""
+
+
 def train_cl(cl_model, train_ds, val_ds, batch_size, logger, checkpoint_path, max_epochs=1000, device="cpu", filename= "best_model", **kwargs):
     # Create model checkpoints based on the top5 metric
     filename = kwargs.pop("filename", filename) 
     
     checkpoint_callback = ModelCheckpoint(dirpath=checkpoint_path,
                                       filename=filename, 
-                                      save_top_k=3, 
+                                      save_top_k=1, 
                                       save_weights_only=True, 
                                       mode="max",
-                                      monitor="val/top5")
+                                      monitor="train/top5")
+    
+    #sample_pairs_callback = ResamplePairsCallback(train_ds)
     
     trainer = pl.Trainer(
         default_root_dir=checkpoint_path, 
@@ -24,10 +37,11 @@ def train_cl(cl_model, train_ds, val_ds, batch_size, logger, checkpoint_path, ma
         devices=1, 
         max_epochs=max_epochs,
         callbacks=[checkpoint_callback,
-                   LearningRateMonitor("epoch")]) # creates a model checkpoint when a new max in val/top5 has been reached 
-    train_loader = data.DataLoader(dataset=train_ds, batch_size=batch_size, shuffle=True, drop_last=True)
-    val_loader = data.DataLoader(dataset= val_ds, batch_size=batch_size, shuffle=False, drop_last=False)
-    pl.seed_everything(10)
+                   LearningRateMonitor("epoch"),]) # creates a model checkpoint when a new max in val/top5 has been reached 
+    
+    train_loader = data.DataLoader(dataset=train_ds, batch_size=batch_size, shuffle=True, drop_last=True, )
+    val_loader = data.DataLoader(dataset= val_ds, batch_size=batch_size, shuffle=False, drop_last=False, )
+    #pl.seed_everything(10)
     model = cl_model(max_epochs=max_epochs, device=device, **kwargs) 
     trainer.fit(model, train_loader, val_loader)
 
