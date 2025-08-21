@@ -44,11 +44,17 @@ MINARI_POINTMAZE_LARGE_MAP = np.array(
      [1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1], 
      [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]
 )
-ENV_HEIGHT, ENV_WIDTH = 480, 480 # this comes from env.shape when recreating the maze 2d environment.
+# Agent x,y bounds
+XMIN = -4.9
+XMAX = 4.9
+YMIN = -3.4
+YMAX = 3.4
 
-# agent coordinate bounds from the minari pointmaze env
-X_BOUND = (-5,5)
-Y_BOUND = (-3.5, 3.5)
+# adjusted for the fact that the walls are beyond these min/max values
+XMIN -= 1
+XMAX += 1
+YMIN -= 1
+YMAX += 1
 
 DEFAULT_CONFIG = {
     "distribution": "l", 
@@ -192,8 +198,6 @@ def main():
     clustered_states.shape
 
     cluster_pts = clustered_states[:, :2]
-    grid_points = visualizations.xy_to_grid(cluster_pts, X_BOUND, Y_BOUND, ENV_HEIGHT, ENV_WIDTH)
-    rows, cols = zip(*grid_points)
 
     fig, axs = plt.subplots(1, 2, figsize=(12,5))
     axs[0].scatter(subsampled_pca_states[:, 0], subsampled_pca_states[:, 1], s=1, c="lightblue", alpha=0.25)
@@ -202,14 +206,16 @@ def main():
     axs[0].axis("off")
 
     axs[1].imshow(MINARI_POINTMAZE_LARGE_MAP, cmap="gray_r", origin="upper",
-            extent=[0, ENV_WIDTH, 0, ENV_HEIGHT])
-    axs[1].plot(cols, rows, "ro")  # note cols = x-axis, rows = y-axis
+           extent=[XMIN, XMAX, YMIN, YMAX])
+    axs[1].scatter(x=cluster_pts[:, 0], y=cluster_pts[:, 1], s=15, c="r")
     axs[1].set_title("Cluster Points Overlaid on Maze (top-down)")
     axs[1].axis("off")
     output_path = os.path.join(FOLDER_PATH, "representation_maze.png")
     fig.savefig(output_path)
     plt.close(fig)
     print("Image 4 processed succesfully.")
+
+
     
 
 if __name__ == "__main__": 
