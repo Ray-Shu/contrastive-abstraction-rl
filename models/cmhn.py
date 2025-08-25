@@ -72,6 +72,9 @@ class cmhn():
             X: Stored patterns, size [N, d].
             queries: Input queries, size [N, d].
             beta: The beta value per sample, size [N].
+        
+        Returns: 
+            A tuple of the updated query matrix of the form: [U, U_norm].
         """        
         
         assert beta != None, "Must have a value for beta." 
