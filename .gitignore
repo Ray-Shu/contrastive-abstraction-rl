@@ -1,12 +1,14 @@
 # Virtual Environments 
 CL_RL
+venv
 
 # Jupyter 
 *.ipynb
 !notebooks/*.ipynb
 !cl_main.ipynb
 !beta_main.ipynb
-!visualizations/*.ipynb
+!visualizations/*.
+test_notebooks/
 
 # wandb 
 wandb/
