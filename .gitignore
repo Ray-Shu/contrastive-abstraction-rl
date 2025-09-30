@@ -2,20 +2,18 @@
 CL_RL
 
 # Jupyter 
-*.ipynb
-!notebooks/*.ipynb
-!cl_main.ipynb
-!beta_main.ipynb
-!visualizations/*.ipynb
+test.ipynb
+#*.ipynb
+##!notebooks/*.ipynb
+#!cl_main.ipynb
+#!beta_main.ipynb
+#!visualizations/*.ipynb
 
 # wandb 
 wandb/
 
 # Models 
-saved_models/ 
-saved_beta_models/
-*.ckpt
-!best_models/*.ckpt
+!train_models
 
 # py 
 __pycache__
