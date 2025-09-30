@@ -61,7 +61,7 @@ The beta model also has many flags that can be adjusted:
 
 To run some visualizations: 
 ```bash 
-python visuals.py
+python -m src.visuals.visuals
 ```
 Note that the visualizations here are only for the Minari PointMaze dataset linked above, and the environment cannot be changed. These visualizations only serve to show what the four contrastive models (using different distributions to sample positive pairs) and what the beta model can do. However, the model corresponding to its statistical distribution can be changed. 
 ```bash

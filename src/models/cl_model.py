@@ -8,7 +8,7 @@ import torch.optim as optim
 import pytorch_lightning as pl
 
 class mlpCL(pl.LightningModule): 
-    def __init__(self, lr, weight_decay, temperature=30, max_epochs=1000, h1=256, h2=128, h3=64, h4=32, device = "cpu"):
+    def __init__(self, lr=1e-3, weight_decay=1e-5, temperature=30, max_epochs=1000, h1=256, h2=128, h3=64, h4=32, device = "cpu"):
         super().__init__() # inherit from LightningModule and nn.module 
         self.save_hyperparameters() # save args  
         self.device_type = device 

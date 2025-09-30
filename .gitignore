@@ -19,6 +19,7 @@ saved_beta_models/
 
 # py 
 __pycache__
+checkpoint_fix.py
 *.pyc
 
 # misc 

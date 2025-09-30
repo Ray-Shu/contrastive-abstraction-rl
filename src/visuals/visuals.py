@@ -8,16 +8,16 @@ import minari
 import numpy as np
 import faiss
 
-from utils import sampling_states
-from utils import pca
-from utils.remove_dupes import remove_dupes
-from utils import visualizations
+from src.utils import sampling_states
+from src.utils import pca
+from src.utils.remove_dupes import remove_dupes
+from src.utils import visualizations
 
-from models.cl_model import mlpCL
-from models.cmhn import cmhn
-from models.beta_model import LearnedBetaModel
+from src.models.cl_model import mlpCL
+from src.models.cmhn import cmhn
+from src.models.beta_model import LearnedBetaModel
 
-from data.TrajectorySet import TrajectorySet
+from src.data.TrajectorySet import TrajectorySet
 
 # Resolving some weird faiss issues
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
@@ -32,7 +32,7 @@ MINARI_DATASET = minari.load_dataset("D4RL/pointmaze/large-v2")
 PROJECT_ROOT = os.getcwd()
 FOLDER_PATH = "test_plots"
 DEVICE = 'cpu'
-BETA_MODEL_NAME = "beta_model.ckpt"
+BETA_MODEL_NAME = "beta_model_resaved.ckpt"
 MINARI_POINTMAZE_LARGE_MAP = np.array(
     [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 
      [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1], 
@@ -76,21 +76,18 @@ def main():
     # Load in contrastive model  
     model_name = ""
     if CONFIG["distribution"] == "l": 
-        model_name = "laplace.ckpt"
+        model_name = "laplace_resaved.ckpt"
     elif CONFIG["distribution"] == "g": 
-        model_name = "gaussian.ckpt"
+        model_name = "gaussian_resaved.ckpt"
     elif CONFIG["distribution"] == "e":
-        model_name = "exponential.ckpt"
+        model_name = "exponential_resaved.ckpt"
     elif CONFIG["distribution"] == "u": 
-        model_name = "uniform.ckpt" 
+        model_name = "uniform_resaved.ckpt" 
 
-    pretrained_model_file = os.path.join(PROJECT_ROOT+ "/best_models", model_name) 
-
-    if os.path.isfile(pretrained_model_file): 
-        print(f"Found pretrained model at {pretrained_model_file}, loading...") 
-        model = mlpCL.load_from_checkpoint(pretrained_model_file, map_location=torch.device(DEVICE))
-    else: 
-        print("Model not found...")
+    cl_model = mlpCL()
+    pretrained_model_file = os.path.join(PROJECT_ROOT+ "/trained_models", model_name) 
+    state_dict = torch.load(pretrained_model_file, map_location="cpu")
+    cl_model.load_state_dict(state_dict)
 
     # Get states from dataset
     print(f'Sampling {CONFIG["total_states"]} states.')
@@ -98,7 +95,7 @@ def main():
     states = states_dict["states"]
 
     # Transform to pca 
-    pca_dict = pca.process_states(states, model)
+    pca_dict = pca.process_states(states, cl_model)
     pca_states = pca_dict["pca-reps"]
 
     # Subsample states for visualization
@@ -122,8 +119,8 @@ def main():
     t1 = trajs[0][0].observations["observation"]
     t2 = trajs[1][0].observations["observation"]
 
-    pca_t1 = pca.pca_transform(t1, pca_dict,  model=model, has_representation=False)
-    pca_t2 = pca.pca_transform(t2, pca_dict,  model=model, has_representation=False)
+    pca_t1 = pca.pca_transform(t1, pca_dict,  model=cl_model, has_representation=False)
+    pca_t2 = pca.pca_transform(t2, pca_dict,  model=cl_model, has_representation=False)
     plt.plot(figsize=(10,6))
     plt.scatter(x=subsampled_pca_states[:, 0], y=subsampled_pca_states[:, 1], s=1, c="lightblue", alpha=0.25)
     plt.scatter(pca_t1[:, 0], pca_t1[:, 1], s=1, c= "red")
@@ -142,20 +139,15 @@ def main():
     mhn = cmhn(update_steps=1, device=DEVICE)
 
     # Get beta model
-    pretrained_model_file = os.path.join(PROJECT_ROOT+ "/best_models", BETA_MODEL_NAME) 
-
-    if os.path.isfile(pretrained_model_file): 
-        print(f"Found pretrained model at {pretrained_model_file}, loading...") 
-        beta_model = LearnedBetaModel.load_from_checkpoint(
-            pretrained_model_file, map_location=torch.device(DEVICE),
-            cmhn = mhn, 
-            device=DEVICE,
-        )
+    beta_model = LearnedBetaModel(cmhn=mhn)
+    pretrained_model_file = os.path.join(PROJECT_ROOT+ "/trained_models", BETA_MODEL_NAME) 
+    state_dict = torch.load(pretrained_model_file, map_location="cpu")
+    beta_model.load_state_dict(state_dict)
 
     # Input subsampled states to get learned representations 
     subsampled_states = states[idx]
     with torch.no_grad(): 
-        z_reps = model(torch.as_tensor(subsampled_states, dtype=torch.float32))
+        z_reps = cl_model(torch.as_tensor(subsampled_states, dtype=torch.float32))
         BETA = beta_model.get_beta(z_reps)
     
     # Get the u-values (output from hopfield network)
@@ -165,7 +157,7 @@ def main():
     unique_mask = remove_dupes(u_norm, k=1000, threshold=0.5)
     unique_u = u[unique_mask]
 
-    pca_u = pca.pca_transform(unique_u, pca_dict,  model=model, has_representation=True)
+    pca_u = pca.pca_transform(unique_u, pca_dict,  model=beta_model, has_representation=True)
     plt.plot(figsize=(10,6))
     plt.scatter(x=subsampled_pca_states[:, 0], y=subsampled_pca_states[:, 1], s=1, c="lightblue", alpha=0.25)
     plt.scatter(pca_u[:, 0], pca_u[:, 1], s=5, c= "red")
@@ -214,9 +206,6 @@ def main():
     fig.savefig(output_path)
     plt.close(fig)
     print("Image 4 processed succesfully.")
-
-
-    
 
 if __name__ == "__main__": 
     main()

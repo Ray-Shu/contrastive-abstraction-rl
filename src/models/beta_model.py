@@ -7,7 +7,7 @@ import pytorch_lightning as pl
 
 
 class LearnedBetaModel(pl.LightningModule): 
-    def __init__(self, cmhn, beta_max, lr=1e-3, weight_decay=1e-5, temperature=1, masking_ratio=0.3, max_epochs=1000, input_dim=32, h1=128, h2=32, fc_h1 = 256, fc_h2 = 128, fc_h3 = 64, device="cpu"):
+    def __init__(self, cmhn, beta_max=200, lr=1e-3, weight_decay=1e-5, temperature=1, masking_ratio=0.3, max_epochs=1000, input_dim=32, h1=128, h2=32, fc_h1 = 256, fc_h2 = 128, fc_h3 = 64, device="cpu"):
         super().__init__() 
         self.save_hyperparameters()
         self.cmhn = cmhn 
