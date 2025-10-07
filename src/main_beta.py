@@ -7,16 +7,16 @@ import torch
 import torch.utils.data as data
 import faiss
 
-from models.cl_model import mlpCL 
-from models.cmhn import cmhn 
-from models.beta_model import LearnedBetaModel
+from src.models.cl_model import mlpCL 
+from src.models.cmhn import cmhn 
+from src.models.beta_model import LearnedBetaModel
 
-from data.StatesDataset import StatesDataset
+from src.data.StatesDataset import StatesDataset
 
-from trainer.beta_trainer import train_beta_model
+from src.trainers.beta_trainer import train_beta_model
 
-from utils.sampling_states import sample_states 
-from utils.tensor_utils import split_data
+from src.utils.sampling_states import sample_states 
+from src.utils.tensor_utils import split_data
 
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint

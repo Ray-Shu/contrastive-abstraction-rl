@@ -3,26 +3,34 @@ CL_RL
 venv
 
 # Jupyter 
+<<<<<<< HEAD
 *.ipynb
 !notebooks/*.ipynb
 !cl_main.ipynb
 !beta_main.ipynb
 !visualizations/*.
 test_notebooks/
+=======
+test.ipynb
+#*.ipynb
+##!notebooks/*.ipynb
+#!cl_main.ipynb
+#!beta_main.ipynb
+#!visualizations/*.ipynb
+>>>>>>> 15e1a8ce4df06ff5271305fe048a09d8a4c85122
 
 # wandb 
 wandb/
 
 # Models 
-saved_models/ 
-saved_beta_models/
-*.ckpt
-!best_models/*.ckpt
+!train_models
 
 # py 
 __pycache__
+checkpoint_fix.py
 *.pyc
 
 # misc 
 test_plots/
 plots/
+readme_etc.txt
