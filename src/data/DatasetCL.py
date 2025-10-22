@@ -1,5 +1,5 @@
 import torch 
-from utils.tensor_utils import convert_batch_to_tensor
+from src.utils.tensor_utils import convert_batch_to_tensor
 
 """
 class DatasetCL(torch.utils.data.Dataset): 

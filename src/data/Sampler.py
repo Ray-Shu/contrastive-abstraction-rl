@@ -1,7 +1,7 @@
-from data.TrajectorySet import TrajectorySet
-from utils.truncated_distributions import truncated_normal
-from utils.truncated_distributions import truncated_laplace
-from utils.truncated_distributions import truncated_exponential
+from src.data.TrajectorySet import TrajectorySet
+from src.utils.truncated_distributions import truncated_normal
+from src.utils.truncated_distributions import truncated_laplace
+from src.utils.truncated_distributions import truncated_exponential
 
 import torch 
 import numpy as np
