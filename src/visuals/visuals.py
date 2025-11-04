@@ -12,6 +12,7 @@ from src.utils import sampling_states
 from src.utils import pca
 from src.utils.remove_dupes import remove_dupes
 from src.utils import visualizations
+from src.utils import load_checkpoint
 
 from src.models.cl_model import mlpCL
 from src.models.cmhn import cmhn
@@ -76,7 +77,7 @@ def main():
     # Load in contrastive model  
     model_name = ""
     if CONFIG["distribution"] == "l": 
-        model_name = "laplace_resaved.ckpt"
+        model_name = "laplace_cos_sim-v1.ckpt"
     elif CONFIG["distribution"] == "g": 
         model_name = "gaussian_resaved.ckpt"
     elif CONFIG["distribution"] == "e":
@@ -86,8 +87,7 @@ def main():
 
     cl_model = mlpCL()
     pretrained_model_file = os.path.join(PROJECT_ROOT+ "/trained_models", model_name) 
-    state_dict = torch.load(pretrained_model_file, map_location="cpu")
-    cl_model.load_state_dict(state_dict)
+    cl_model = load_checkpoint.load_lightning_checkpoint(cl_model, pretrained_model_file)
 
     # Get states from dataset
     print(f'Sampling {CONFIG["total_states"]} states.')
