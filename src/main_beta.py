@@ -38,14 +38,14 @@ os.makedirs(name=FOLDER_NAME, exist_ok=True)
 CHECKPOINT_PATH = os.path.join(PROJECT_ROOT, FOLDER_NAME)
 
 PROJECT_NAME = "Learning Beta Model"
-RUN_NAME = "beta_model"
+RUN_NAME = "run"
 FILENAME = RUN_NAME
 DEVICE = "mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu"
 
 DEFAULT_CONFIG = {
         "num_states": 1_000_000,  
         "lr": 1e-3,
-        "temperature": 1, 
+        "temperature": 0.03796123348109251, 
         "weight_decay": 1e-5, 
         "masking_ratio": 0.3,
         "beta_max": 200,
@@ -77,20 +77,11 @@ def main():
     CONFIG = vars(args)
 
     # Load cmhn model 
-    mhn = cmhn(update_steps=1, device=DEVICE)
+    mhn = cmhn(max_iter=1000, threshold=0.9999, device=DEVICE)
 
     # Load trained CL model 
-    model_name = ""
-    if CONFIG['cl_model_distribution'] == "l": 
-        model_name = "laplace.ckpt"
-    elif CONFIG['cl_model_distribution'] == "g": 
-        model_name = "gaussian.ckpt"
-    elif CONFIG["cl_model_distribution"] == "e":
-        model_name = "exponential.ckpt"
-    elif CONFIG["cl_model_distribution"] == "u": 
-        model_name= "uniform.ckpt"
-
-    pretrained_model_file = os.path.join(PROJECT_ROOT+ "/best_models", model_name) 
+    model_name = "laplace_cos_sim-v1.ckpt"
+    pretrained_model_file = os.path.join(PROJECT_ROOT+ "/trained_models", model_name) 
 
     if os.path.isfile(pretrained_model_file): 
         print(f"Found pretrained model at {pretrained_model_file}, loading...") 
