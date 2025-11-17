@@ -58,19 +58,22 @@ class LearnedBetaModel(pl.LightningModule):
         Returns: 
             loss: The infoNCE loss. 
         """
+        batch_norm = F.normalize(batch, p=2, dim=-1)
+
         # get the trial beta 
-        beta = self.beta_net(batch)
+        beta = self.beta_net(batch_norm)
 
         beta = beta * self.hparams.beta_max
 
         # get abstract representation 'u' 
-        U, U_norm = self.cmhn.run(batch, batch, beta, run_as_batch=True) 
+        u = self.cmhn.run(batch_norm, batch_norm, beta, run_as_batch=True) 
+        u_norm = F.normalize(u, p=2, dim=-1)
 
         # get the noisy batch, nn.Dropout uses scaling=True to maintain expected value of tensor
-        z_prime = self.dropout(batch)
+        z_prime = self.dropout(batch_norm)
 
         # create positive pairs
-        pairs = torch.cat([U_norm, z_prime], dim=0)
+        pairs = torch.cat([u_norm, z_prime], dim=0)
       
         # put new batch pairs into fc_nn to obtain vectors in new embedding space useful for contrastive learning 
         p = self.fc_nn(pairs)
@@ -88,7 +91,8 @@ class LearnedBetaModel(pl.LightningModule):
             with torch.no_grad():
                 self.log(f"{mode}/sim_mean", sim.mean(), on_epoch=True)
                 self.log(f"{mode}/sim_std", sim.std(), on_epoch=True)
-
+                sim_xy = torch.mean(torch.sum(batch_norm * u_norm, dim=-1))
+                self.log(f"{mode}/sim_xy", sim_xy, on_epoch=True)
 
         # mask diagonals to large negative numbers so we don't calculate same state similarities
         mask = torch.eye(2 * N, device=sim.device).bool()
@@ -107,7 +111,7 @@ class LearnedBetaModel(pl.LightningModule):
                 self.log(f"{mode}/p_norm_std", norms.std(), on_epoch=True)
                 self.log(f"{mode}/beta_mean", beta.mean(), on_epoch=True)
 
-                u_norms = torch.norm(U_norm, dim=1)
+                u_norms = torch.norm(u_norm, dim=1)
                 self.log(f"{mode}/U_norm_mean", u_norms.mean(), on_epoch=True)
                 self.log(f"{mode}/U_norm_std", u_norms.std(), on_epoch=True)
                 self.log(f"{mode}/U_norm_max", u_norms.max(), on_epoch=True)

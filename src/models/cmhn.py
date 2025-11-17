@@ -13,7 +13,7 @@ from torchvision import transforms
 import matplotlib.pyplot as plt 
 
 class cmhn(): 
-    def __init__(self, update_steps = 1, topk = 256, use_gpu = False, device="cpu"):
+    def __init__(self, max_iter = 100, threshold = 0.95,topk = 256, use_gpu = False, device="cpu"):
         """
         Continuous Modern Hopfield Network 
 
@@ -23,7 +23,8 @@ class cmhn():
             use_gpu: Tells faiss if we use faiss-cpu or faiss-gpu for behind the scenes calculations. 
             device: The device that torch will use. 
         """
-        self.update_steps = update_steps 
+        self.max_iter = max_iter 
+        self.threshold = threshold
         self.topk = topk
         self.use_gpu = use_gpu
         self.device = torch.device(device)
@@ -81,37 +82,61 @@ class cmhn():
         # normalize for cos sim calcs
         X_norm = F.normalize(X, p=2, dim=-1)
         queries_norm = F.normalize(queries, p=2, dim=-1)
-        norms = X_norm.norm(p=2, dim=-1)
 
-        input = [[X, queries],[X_norm, queries_norm]]
-        res = []
-        # create two xi_news: xi_new, xi_new_norm
-        for i in range(len(input)):
-            self.__build_index(X, d) 
+        self.__build_index(X, d) 
 
-            queries_np = input[i][1].detach().cpu().numpy().astype("float32")
-            distances, indices = self.index.search(queries_np, self.topk)
-            
-            queries = torch.from_numpy(queries_np).to(X.device)
-            indices = torch.from_numpy(indices).to(X.device) # indices of shape [N, topk]
+        queries_np = queries_norm.detach().cpu().numpy().astype("float32")
+        _, indices = self.index.search(queries_np, self.topk)
+        
+        queries = torch.from_numpy(queries_np).to(X.device)
+        indices = torch.from_numpy(indices).to(X.device) # indices of shape [N, topk]
 
-            topk_X = input[i][0][indices] # size [N, topk, d] 
-            topk_q = queries.unsqueeze(1) # change queries from [N, d] to [N, 1, d] for broadcasting
-            
-            # dot product of x_ij * q_i along "d dim" to obtain tensor of [N, topk]
-            # q_i represents the i'th query
-            # x_ij represents the corresponding i'th query and j'th pattern, where j is among the topk 
-            # then sum over d to obtain the similarity between row i and col j. 
-            sims = torch.sum(topk_X * topk_q, dim=-1) 
+        topk_X = X_norm[indices] # size [N, topk, d] 
+        topk_q = queries.unsqueeze(1) # change queries from [N, d] to [N, 1, d] for broadcasting
+        
+        # dot product of x_ij * q_i along "d dim" to obtain tensor of [N, topk]
+        # q_i represents the i'th query
+        # x_ij represents the corresponding i'th query and j'th pattern, where j is among the topk 
+        # then sum over d to obtain the similarity between row i and col j. 
+        sims = torch.sum(topk_X * topk_q, dim=-1) 
 
-            beta = beta.view(-1, 1)  # beta: [N, 1], broadcasting beta. 
-            sims = beta * sims       # sims * beta: [N, topk]
-            probs = F.softmax(sims, dim=-1) # calculate probs along patterns (NOT queries) ie. along topk --> [N, topk]
-            
-            # weighted sum over topk_X: x_ij * probs_i
-            res.append(torch.sum(probs.unsqueeze(-1) * topk_X, dim=1))
+        beta = beta.view(-1, 1)  # beta: [N, 1], broadcasting beta. 
+        sims = beta * sims       # sims * beta: [N, topk]
+        probs = F.softmax(sims, dim=-1) # calculate probs along patterns (NOT queries) ie. along topk --> [N, topk]
+        
+        # weighted sum over topk_X: x_ij * probs_i
+        xi_new = torch.sum(probs.unsqueeze(-1) * topk_X, dim=1)
 
-        return res[0], res[1]
+        return xi_new
+    
+    def __has_converged(self, old_xi, new_xi): 
+        """ 
+        Checks whether or not the hopfield network has converged. Convergence is measured through taking the average cosine similarity 
+        between old_xi and new_xi. If this average meets the threshold (ie. avg_cos_sim >= threshold), then we say that old_xi and 
+        new_xi are the same and that the hopfield network has converged. 
+
+        old_xi and new_xi are shapes: [N, d]
+
+        Args: 
+            old_xi xi before running the udpate rule.
+            new_xi: xi after running the update rule.
+        
+        Returns:
+            True: if the average cosine similarity between old_xi and new_xi is meets the threshold.
+            False: if the average cosine similarity between old_xi and new_xi is below the threshold.
+        """
+        converged = False 
+
+        old_norm = F.normalize(old_xi, p=2, dim=-1)  # normalize along rows
+        new_norm = F.normalize(new_xi, p=2, dim=-1)
+
+        cos_sim = torch.sum(old_norm * new_norm, dim=1)  # [N], similarity for each query
+
+        min_cos_sim = cos_sim.min().item()
+        if min_cos_sim >= self.threshold:
+            converged = True
+
+        return converged
 
     def run(self, X, xi, beta=None, run_as_batch=False): 
         """
@@ -137,8 +162,12 @@ class cmhn():
             if xi.dim() == 1: 
                 raise ValueError("Query shape should be [N, d] when updating as a batch.")
             
-            for _ in range(self.update_steps): 
+            for i in range(self.max_iter): 
+                old_xi = xi.clone()
                 xi = self.__run_batch(X, xi, beta)
+
+                if self.__has_converged(old_xi=old_xi, new_xi=xi): 
+                    break 
             return xi
         
         else:
@@ -151,5 +180,6 @@ class cmhn():
             for _ in range(self.update_steps): 
                 xi = self.__update(X, xi, beta)
             return xi 
+    
     
 
