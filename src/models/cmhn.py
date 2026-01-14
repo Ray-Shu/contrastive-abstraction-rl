@@ -13,7 +13,7 @@ from torchvision import transforms
 import matplotlib.pyplot as plt 
 
 class cmhn(): 
-    def __init__(self, max_iter = 100, threshold = 0.95,topk = 256, use_gpu = False, device="cpu"):
+    def __init__(self, max_iter = 100, threshold = 0.95, topk = 512, device="cpu"):
         """
         Continuous Modern Hopfield Network 
 
@@ -26,21 +26,17 @@ class cmhn():
         self.max_iter = max_iter 
         self.threshold = threshold
         self.topk = topk
-        self.use_gpu = use_gpu
+
         self.device = torch.device(device)
         self.index = None 
 
-    def __build_index(self, X, d): 
+    def build_index(self, X, d): 
         """
-        Builds a faiss index (an object) for efficient searching of top-k patterns from X. 
+        Builds a faiss index (an object) for efficient searching of top-k patterns from X (on cpu). 
         """
         X_np = X.detach().cpu().numpy().astype("float32") # convert X from tensor to numpy 
 
-        if self.use_gpu: 
-            flat_index = faiss.IndexFlatL2(d) 
-            self.index = faiss.index_cpu_to_all_gpus(flat_index)
-        else: 
-            self.index = faiss.IndexFlatL2(d)
+        self.index = faiss.IndexFlatIP(d)
         
         self.index.add(X_np)
     
@@ -76,34 +72,34 @@ class cmhn():
         """        
         
         assert beta != None, "Must have a value for beta." 
-        assert X.shape == queries.shape, "X and queries must be the same shape! (N, d)."
-        N, d = X.shape 
 
         # normalize for cos sim calcs
         X_norm = F.normalize(X, p=2, dim=-1)
         queries_norm = F.normalize(queries, p=2, dim=-1)
 
-        self.__build_index(X, d) 
-
-        queries_np = queries_norm.detach().cpu().numpy().astype("float32")
-        _, indices = self.index.search(queries_np, self.topk)
-        
-        queries = torch.from_numpy(queries_np).to(X.device)
-        indices = torch.from_numpy(indices).to(X.device) # indices of shape [N, topk]
+        with torch.no_grad():
+            queries_np = queries_norm.detach().cpu().numpy().astype("float32")
+            _, indices = self.index.search(queries_np, self.topk)
+            indices = torch.from_numpy(indices).to(X.device) # indices of shape [N, topk]
 
         topk_X = X_norm[indices] # size [N, topk, d] 
-        topk_q = queries.unsqueeze(1) # change queries from [N, d] to [N, 1, d] for broadcasting
+        topk_q = queries_norm.unsqueeze(1) # change queries from [N, d] to [N, 1, d] for broadcasting
         
         # dot product of x_ij * q_i along "d dim" to obtain tensor of [N, topk]
         # q_i represents the i'th query
         # x_ij represents the corresponding i'th query and j'th pattern, where j is among the topk 
         # then sum over d to obtain the similarity between row i and col j. 
-        sims = torch.sum(topk_X * topk_q, dim=-1) 
+        # sims = torch.sum(topk_X * topk_q, dim=-1) 
 
-        beta = beta.view(-1, 1)  # beta: [N, 1], broadcasting beta. 
-        sims = beta * sims       # sims * beta: [N, topk]
-        probs = F.softmax(sims, dim=-1) # calculate probs along patterns (NOT queries) ie. along topk --> [N, topk]
-        
+        # USE torch.bmm instead of the above comments for more efficient computation (they do the same thing tho) 
+        sims = torch.bmm(topk_q, topk_X.transpose(1,2)).squeeze(1)
+
+        # removing beta broadcasting
+        #beta = beta.view(-1, 1)  # beta: [N, 1], broadcasting beta. 
+        logits = beta * sims       # sims * beta: [N, topk]
+        logits_max = torch.max(logits, dim=-1, keepdim=True)[0]
+        probs = F.softmax(logits - logits_max.detach(), dim=-1)   # calculate probs along patterns (NOT queries) ie. along topk --> [N, topk]
+
         # weighted sum over topk_X: x_ij * probs_i
         xi_new = torch.sum(probs.unsqueeze(-1) * topk_X, dim=1)
 
@@ -161,15 +157,14 @@ class cmhn():
         if run_as_batch: 
             if xi.dim() == 1: 
                 raise ValueError("Query shape should be [N, d] when updating as a batch.")
-            
-            for i in range(self.max_iter): 
+            for _ in range(self.max_iter): 
                 old_xi = xi.clone()
                 xi = self.__run_batch(X, xi, beta)
 
                 if self.__has_converged(old_xi=old_xi, new_xi=xi): 
                     break 
             return xi
-        
+
         else:
             # if xi is of size [d], then change to [d, 1] 
             if xi.dim() == 1: 
@@ -177,9 +172,6 @@ class cmhn():
             elif xi.dim() == 2 and xi.size(1) != 1: 
                 raise ValueError("Query shape should be [d] or [d, 1].") 
 
-            for _ in range(self.update_steps): 
+            for _ in range(self.max_iter): 
                 xi = self.__update(X, xi, beta)
             return xi 
-    
-    
-
