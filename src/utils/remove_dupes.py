@@ -16,7 +16,7 @@ def remove_dupes(x, k=1000, threshold=0.99):
         Then, to obtain the unique variant, do x[mask].
     """
     x = x / np.linalg.norm(x, axis=1, keepdims=True)
-    index = faiss.IndexFlatIP(x.shape[1])
+    index = faiss.IndexFlatIP(x.shape[1])  # Calculates inner product (since, vectors are normalized, this is cosine similarity)
     index.add(x)
 
     N = x.shape[0]
@@ -25,11 +25,11 @@ def remove_dupes(x, k=1000, threshold=0.99):
     for i in range(N):
         if not mask[i]:
             continue
-        D, I = index.search(x[i:i+1], k+1)
-        neighbors = I[0, 1:]
-        sims = D[0, 1:]
-        for n, sim in zip(neighbors, sims):
+        D, I = index.search(x[i:i+1], k+1)   # D is the similarity scores, I is the indices of neighbours.
+        neighbours_idx = I[0, 1:]
+        sims_score = D[0, 1:]
+        for n_idx, sim in zip(neighbours_idx, sims_score):
             if sim > threshold:
-                mask[n] = False
+                mask[n_idx] = False
 
     return mask

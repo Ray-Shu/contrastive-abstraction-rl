@@ -44,9 +44,10 @@ class mlpCL(pl.LightningModule):
         x = torch.cat(batch, dim=0)  # shape: [2N, D]
 
         z = self.mlp(x)  # [2N, h4]
+        z = F.normalize(z, dim=1)  # normalize vectors for cosine sim
         N = z.size(0) // 2
         
-        # normalize vector embedding
+        # compute cos sim with temperature
         sim = torch.matmul(z, z.T) / self.hparams.temperature  # cosine sim matrix [2N, 2N]
 
         # extra statistics 
