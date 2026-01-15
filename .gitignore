@@ -3,21 +3,13 @@ CL_RL
 venv
 
 # Jupyter 
-<<<<<<< HEAD
-*.ipynb
-!notebooks/*.ipynb
-!cl_main.ipynb
-!beta_main.ipynb
-!visualizations/*.
-test_notebooks/
-=======
 test.ipynb
+test_notebooks/
 #*.ipynb
 ##!notebooks/*.ipynb
 #!cl_main.ipynb
 #!beta_main.ipynb
 #!visualizations/*.ipynb
->>>>>>> 15e1a8ce4df06ff5271305fe048a09d8a4c85122
 
 # wandb 
 wandb/

@@ -13,33 +13,28 @@ from torchvision import transforms
 import matplotlib.pyplot as plt 
 
 class cmhn(): 
-    def __init__(self, update_steps = 1, topk = 256, use_gpu = False, device="cpu"):
+    def __init__(self, max_iter = 100, threshold = 0.95, device="cpu"):
         """
         Continuous Modern Hopfield Network 
 
         Args: 
             update_steps: The number of iterations the cmhn will do. (Usually just one).
-            topk: Using faiss, only the top k most similar patterns will be used. (more efficient in batch-wise updates) 
             use_gpu: Tells faiss if we use faiss-cpu or faiss-gpu for behind the scenes calculations. 
             device: The device that torch will use. 
         """
-        self.update_steps = update_steps 
-        self.topk = topk
-        self.use_gpu = use_gpu
+        self.max_iter = max_iter 
+        self.threshold = threshold
+
         self.device = torch.device(device)
         self.index = None 
 
-    def __build_index(self, X, d): 
+    def build_index(self, X, d): 
         """
-        Builds a faiss index (an object) for efficient searching of top-k patterns from X. 
+        Builds a faiss index (an object) for efficient searching of top-k patterns from X (on cpu). 
         """
         X_np = X.detach().cpu().numpy().astype("float32") # convert X from tensor to numpy 
 
-        if self.use_gpu: 
-            flat_index = faiss.IndexFlatL2(d) 
-            self.index = faiss.index_cpu_to_all_gpus(flat_index)
-        else: 
-            self.index = faiss.IndexFlatL2(d)
+        self.index = faiss.IndexFlatIP(d)
         
         self.index.add(X_np)
     
@@ -60,7 +55,7 @@ class cmhn():
         p = F.softmax(beta * sims, dim=0, dtype=torch.float32)  # softmax dist along patterns (higher probability => more likely to be that stored pattern)
         # p of size [N, 1] 
 
-        X_T = X_norm.transpose(0, 1) 
+        X_T = X.transpose(0, 1) 
         xi_new = X_T @ p  # xi_new, the updated state pattern; size [d, 1]
         return xi_new
 
@@ -75,43 +70,55 @@ class cmhn():
         """        
         
         assert beta != None, "Must have a value for beta." 
-        assert X.shape == queries.shape, "X and queries must be the same shape! (N, d)."
-        N, d = X.shape 
 
-        # normalize for cos sim calcs
-        X_norm = F.normalize(X, p=2, dim=-1)
-        queries_norm = F.normalize(queries, p=2, dim=-1)
-        norms = X_norm.norm(p=2, dim=-1)
+        X_norm = F.normalize(X, p=2, dim=-1)  # [N_patterns, d]
+        queries_norm = F.normalize(queries, p=2, dim=-1)  # [N_queries, d]
+        sims = queries_norm @ X_norm.T 
 
-        input = [[X, queries],[X_norm, queries_norm]]
-        res = []
-        # create two xi_news: xi_new, xi_new_norm
-        for i in range(len(input)):
-            self.__build_index(X, d) 
+        # Handle scalar, 0D tensor, or 1D tensor
+        if isinstance(beta, (int, float)):
+            beta = torch.tensor(beta, dtype=torch.float32, device=X.device)
+        
+        if beta.dim() == 0:  # 0D tensor (scalar)
+            pass  # Broadcasting works automatically
+        elif beta.dim() == 1:  # 1D tensor [N_queries]
+            beta = beta.view(-1, 1)  # [N_queries, 1]
 
-            queries_np = input[i][1].detach().cpu().numpy().astype("float32")
-            distances, indices = self.index.search(queries_np, self.topk)
-            
-            queries = torch.from_numpy(queries_np).to(X.device)
-            indices = torch.from_numpy(indices).to(X.device) # indices of shape [N, topk]
+        logits = beta * sims  # [N_queries, N_patterns]
+        probs = F.softmax(logits, dim=-1)  # [N_queries, N_patterns]
 
-            topk_X = input[i][0][indices] # size [N, topk, d] 
-            topk_q = queries.unsqueeze(1) # change queries from [N, d] to [N, 1, d] for broadcasting
-            
-            # dot product of x_ij * q_i along "d dim" to obtain tensor of [N, topk]
-            # q_i represents the i'th query
-            # x_ij represents the corresponding i'th query and j'th pattern, where j is among the topk 
-            # then sum over d to obtain the similarity between row i and col j. 
-            sims = torch.sum(topk_X * topk_q, dim=-1) 
+        xi_new = probs @ X
 
-            beta = beta.view(-1, 1)  # beta: [N, 1], broadcasting beta. 
-            sims = beta * sims       # sims * beta: [N, topk]
-            probs = F.softmax(sims, dim=-1) # calculate probs along patterns (NOT queries) ie. along topk --> [N, topk]
-            
-            # weighted sum over topk_X: x_ij * probs_i
-            res.append(torch.sum(probs.unsqueeze(-1) * topk_X, dim=1))
+        return xi_new
+    
+    def __has_converged(self, old_xi, new_xi): 
+        """ 
+        Checks whether or not the hopfield network has converged. Convergence is measured through taking the average cosine similarity 
+        between old_xi and new_xi. If this average meets the threshold (ie. avg_cos_sim >= threshold), then we say that old_xi and 
+        new_xi are the same and that the hopfield network has converged. 
 
-        return res[0], res[1]
+        old_xi and new_xi are shapes: [N, d]
+
+        Args: 
+            old_xi xi before running the udpate rule.
+            new_xi: xi after running the update rule.
+        
+        Returns:
+            True: if the average cosine similarity between old_xi and new_xi is meets the threshold.
+            False: if the average cosine similarity between old_xi and new_xi is below the threshold.
+        """
+        converged = False 
+
+        old_norm = F.normalize(old_xi, p=2, dim=-1)  # normalize along rows
+        new_norm = F.normalize(new_xi, p=2, dim=-1)
+
+        cos_sim = torch.sum(old_norm * new_norm, dim=1)  # [N], similarity for each query
+
+        min_cos_sim = cos_sim.min().item()
+        if min_cos_sim >= self.threshold:
+            converged = True
+
+        return converged
 
     def run(self, X, xi, beta=None, run_as_batch=False): 
         """
@@ -136,11 +143,14 @@ class cmhn():
         if run_as_batch: 
             if xi.dim() == 1: 
                 raise ValueError("Query shape should be [N, d] when updating as a batch.")
-            
-            for _ in range(self.update_steps): 
+            for _ in range(self.max_iter): 
+                old_xi = xi.clone()
                 xi = self.__run_batch(X, xi, beta)
+
+                if self.__has_converged(old_xi=old_xi, new_xi=xi): 
+                    break 
             return xi
-        
+
         else:
             # if xi is of size [d], then change to [d, 1] 
             if xi.dim() == 1: 
@@ -148,8 +158,6 @@ class cmhn():
             elif xi.dim() == 2 and xi.size(1) != 1: 
                 raise ValueError("Query shape should be [d] or [d, 1].") 
 
-            for _ in range(self.update_steps): 
+            for _ in range(self.max_iter): 
                 xi = self.__update(X, xi, beta)
             return xi 
-    
-
