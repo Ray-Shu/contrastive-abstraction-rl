@@ -22,7 +22,8 @@ __pycache__
 checkpoint_fix.py
 *.pyc
 
-# misc 
+# misc
 test_plots/
 plots/
 readme_etc.txt
+conversation_archive.md

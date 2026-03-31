@@ -20,7 +20,7 @@ decorator @ file:///home/conda/feedstock_root/build_artifacts/decorator_17403849
 eval_type_backport==0.2.2
 exceptiongroup @ file:///home/conda/feedstock_root/build_artifacts/exceptiongroup_1746947292760/work
 executing @ file:///home/conda/feedstock_root/build_artifacts/executing_1745502089858/work
-faiss-cpu==1.12.0
+hopfield-layers
 Farama-Notifications==0.0.4
 filelock @ file:///C:/b/abs_758187j281/croot/filelock_1744281404850/work
 fonttools @ file:///C:/miniconda3/conda-bld/fonttools_1759754888248/work

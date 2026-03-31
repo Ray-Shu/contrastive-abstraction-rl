@@ -18,7 +18,11 @@ class TrajectorySet:
         self.num_trajectories = 0 
     
     def add_trajectory(self, trajectory):
-        self.trajectories[self.num_trajectories] = [trajectory, len(trajectory)] 
+        if isinstance(trajectory, dict):
+            length = len(trajectory['actions'])
+        else:
+            length = len(trajectory)
+        self.trajectories[self.num_trajectories] = [trajectory, length]
         self.num_trajectories += 1
     
     def get_total_episodes(self): 
@@ -40,21 +44,26 @@ class TrajectorySet:
             sum += v[1]
         return sum 
 
-    def generate_trajectories(self, n_trajectories: int = 2): 
+    def generate_trajectories(self, n_trajectories: int = 2, add_action: bool = False):
         """
-        Generates a specified number of trajectories and saves them into the TrajectorySet class. 
+        Generates a specified number of trajectories and saves them into the TrajectorySet class.
 
-        This runs the scripted agent, where the agent uses a PD controller to follow a 
+        This runs the scripted agent, where the agent uses a PD controller to follow a
         path of waypoints generated with QIteration until it reaches the goal.
 
-        Args: 
-            n_trajectories: The number of trajectories to generate. 
+        Args:
+            n_trajectories: The number of trajectories to generate.
+            add_action: If True, stores both states and actions as a dict {'states': ..., 'actions': ...}.
+                        State indices are aligned to actions (shape [T, action_dim]), so T valid (state, action) pairs exist.
         """
         ep_data = self.dataset.sample_episodes(n_episodes=n_trajectories) # sample trajectories
-        
-        # adds all of the sampled trajectories into the TrajectorySet 
-        for i in range(len(ep_data)):
-            ep = ep_data[i] 
 
-            # Note: only saving states since we only need state representations in the encoder 
-            self.add_trajectory(ep.observations["observation"]) 
+        # adds all of the sampled trajectories into the TrajectorySet
+        for i in range(len(ep_data)):
+            ep = ep_data[i]
+
+            if add_action:
+                self.add_trajectory({'states': ep.observations["observation"], 'actions': ep.actions})
+            else:
+                # Note: only saving states since we only need state representations in the encoder
+                self.add_trajectory(ep.observations["observation"])

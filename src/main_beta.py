@@ -1,15 +1,14 @@
-import os 
-import sys 
+import os
+import sys
 import argparse
 
 import minari
-import torch 
+import torch
 import torch.utils.data as data
-import faiss
 
-from src.models.cl_model import mlpCL 
-from src.models.cmhn import cmhn 
+from src.models.cl_model import mlpCL
 from src.models.beta_model import LearnedBetaModel
+from src.models.beta_objectives import ContrastiveHopfieldObjective
 
 from src.data.StatesDataset import StatesDataset
 
@@ -21,12 +20,6 @@ from src.utils.tensor_utils import split_data
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
-
-# Ensures that the jupyter kernel doesn't crash when running chn calculations with faiss
-os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-os.environ["OMP_NUM_THREADS"] = "1"
-torch.set_num_threads(1)
-faiss.omp_set_num_threads(1)
 
 # Globals
 MINARI_DATASET = minari.load_dataset("D4RL/pointmaze/large-v2")
@@ -43,16 +36,18 @@ FILENAME = RUN_NAME
 DEVICE = "mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu"
 
 DEFAULT_CONFIG = {
-        "num_states": 1_000_000,  
+        "num_states": 1_000_000,
         "lr": 1e-3,
-        "temperature": 0.03796123348109251, 
-        "weight_decay": 1e-5, 
+        "temperature": 0.03796123348109251,
+        "weight_decay": 1e-5,
         "masking_ratio": 0.3,
-        "beta_max": 200,
+        "hopfield_scale": 500.0,
+        "hopfield_steps_max": 10,
+        "hopfield_steps_eps": 1e-6,
         "max_epochs": 100,
         "filename": FILENAME,
         "device": DEVICE,
-        "minibatch": 4096, 
+        "minibatch": 4096,
         "cl_model_distribution": "l"
     }
 
@@ -63,7 +58,9 @@ def parse_args():
     parser.add_argument("--temperature", type=float, default=DEFAULT_CONFIG["temperature"])
     parser.add_argument("--weight_decay", type=float, default=DEFAULT_CONFIG["weight_decay"])
     parser.add_argument("--masking_ratio", type=float, default=DEFAULT_CONFIG["masking_ratio"])
-    parser.add_argument("--beta_max", type=float, default=DEFAULT_CONFIG["beta_max"])
+    parser.add_argument("--hopfield_scale", type=float, default=DEFAULT_CONFIG["hopfield_scale"])
+    parser.add_argument("--hopfield_steps_max", type=int, default=DEFAULT_CONFIG["hopfield_steps_max"])
+    parser.add_argument("--hopfield_steps_eps", type=float, default=DEFAULT_CONFIG["hopfield_steps_eps"])
     parser.add_argument("--max_epochs", type=int, default=DEFAULT_CONFIG["max_epochs"])
     parser.add_argument("--filename", type=str, default=DEFAULT_CONFIG["filename"])
     parser.add_argument("--device", type=str, default=DEFAULT_CONFIG["device"])
@@ -76,10 +73,7 @@ def main():
     args = parse_args()
     CONFIG = vars(args)
 
-    # Load cmhn model 
-    mhn = cmhn(max_iter=1000, threshold=0.9999, device=DEVICE)
-
-    # Load trained CL model 
+    # Load trained CL model
     model_name = "laplace_cos_sim-v1.ckpt"
     pretrained_model_file = os.path.join(PROJECT_ROOT+ "/trained_models", model_name) 
 
@@ -105,24 +99,29 @@ def main():
             log_model=True,
             config = CONFIG) 
 
+    objective = ContrastiveHopfieldObjective(
+        temperature=CONFIG["temperature"],
+        masking_ratio=CONFIG["masking_ratio"],
+    )
+
     model = train_beta_model(
         bm_model=LearnedBetaModel,
-        cmhn=mhn, 
         train_ds=train_ds,
-        val_ds = val_ds,
-        batch_size=CONFIG["minibatch"], 
-        logger=wandb_logger, 
-        checkpoint_path=CHECKPOINT_PATH, 
+        val_ds=val_ds,
+        batch_size=CONFIG["minibatch"],
+        logger=wandb_logger,
+        checkpoint_path=CHECKPOINT_PATH,
         max_epochs=CONFIG["max_epochs"],
-        device=CONFIG["device"], 
-        filename= FILENAME,
+        device=CONFIG["device"],
+        filename=FILENAME,
 
-        # kwaargs
+        # kwargs
+        objective=objective,
         lr=CONFIG["lr"],
-        weight_decay=CONFIG["weight_decay"], 
-        masking_ratio=CONFIG["masking_ratio"], 
-        beta_max=CONFIG["beta_max"],
-        temperature=CONFIG["temperature"]
+        weight_decay=CONFIG["weight_decay"],
+        hopfield_scale=CONFIG["hopfield_scale"],
+        hopfield_steps_max=CONFIG["hopfield_steps_max"],
+        hopfield_steps_eps=CONFIG["hopfield_steps_eps"],
     )
 
 if __name__ == "__main__": 
