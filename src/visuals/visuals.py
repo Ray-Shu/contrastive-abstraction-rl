@@ -1,10 +1,10 @@
-import os 
-import sys 
+import os
+import sys
 import argparse
 
-import matplotlib.pyplot as plt 
-import torch  
-import minari 
+import matplotlib.pyplot as plt
+import torch
+import ogbench
 import numpy as np
 import faiss
 
@@ -29,72 +29,54 @@ faiss.omp_set_num_threads(1)
 # Solves a faiss issue with macbooks
 sys.modules['faiss.swigfaiss_avx2'] = faiss
 
-MINARI_DATASET = minari.load_dataset("D4RL/pointmaze/large-v2")
 PROJECT_ROOT = os.getcwd()
 FOLDER_PATH = "test_plots"
 DEVICE = 'cpu'
 BETA_MODEL_NAME = "beta_model_resaved.ckpt"
-MINARI_POINTMAZE_LARGE_MAP = np.array(
-    [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 
-     [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1], 
-     [1, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1], 
-     [1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1], 
-     [1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 0, 1], 
-     [1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1], 
-     [1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1], 
-     [1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1], 
-     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]
-)
-# Agent x,y bounds
-XMIN = -4.9
-XMAX = 4.9
-YMIN = -3.4
-YMAX = 3.4
-
-# adjusted for the fact that the walls are beyond these min/max values
-XMIN -= 1
-XMAX += 1
-YMIN -= 1
-YMAX += 1
 
 DEFAULT_CONFIG = {
-    "distribution": "l", 
+    "og_dataset_name": "antmaze-large-navigate-v0",
+    "distribution": "l",
     "subsample_size": 10_000,
     "total_states": 1_000_000
 }
 
-def parse_args(): 
+def parse_args():
     parser = argparse.ArgumentParser(description="visualize")
+    parser.add_argument("--og_dataset_name", type=str, default=DEFAULT_CONFIG["og_dataset_name"])
     parser.add_argument("--distribution", type=str, default=DEFAULT_CONFIG["distribution"])
     parser.add_argument("--subsample_size", type=int, default=DEFAULT_CONFIG["subsample_size"])
     parser.add_argument("--total_states", type=int, default=DEFAULT_CONFIG["total_states"])
     return parser.parse_args()
 
-def main(): 
-    args = parse_args() 
+def main():
+    args = parse_args()
     CONFIG = vars(args)
-    
-    # Load in contrastive model  
+
+    # Load in contrastive model
     model_name = ""
-    if CONFIG["distribution"] == "l": 
+    if CONFIG["distribution"] == "l":
         model_name = "laplace_cos_sim-v1.ckpt"
-    elif CONFIG["distribution"] == "g": 
+    elif CONFIG["distribution"] == "g":
         model_name = "gaussian_resaved.ckpt"
     elif CONFIG["distribution"] == "e":
         model_name = "exponential_resaved.ckpt"
-    elif CONFIG["distribution"] == "u": 
-        model_name = "uniform_resaved.ckpt" 
+    elif CONFIG["distribution"] == "u":
+        model_name = "uniform_resaved.ckpt"
 
     cl_model = mlpCL()
-    pretrained_model_file = os.path.join(PROJECT_ROOT+ "/trained_models", model_name) 
+    pretrained_model_file = os.path.join(PROJECT_ROOT+ "/trained_models", model_name)
     cl_model = load_checkpoint.load_lightning_checkpoint(cl_model, pretrained_model_file)
+
+    # Load OGBench dataset
+    _, og_dataset, _ = ogbench.make_env_and_datasets(CONFIG["og_dataset_name"])
 
     # Get states from dataset
     print(f'Sampling {CONFIG["total_states"]} states.')
-    states_dict = sampling_states.sample_states(MINARI_DATASET, CONFIG["total_states"],)
+    states_dict = sampling_states.sample_states(og_dataset, CONFIG["total_states"])
     states = states_dict["states"]
 
-    # Transform to pca 
+    # Transform to pca
     pca_dict = pca.process_states(states, cl_model)
     pca_states = pca_dict["pca-reps"]
 
@@ -115,9 +97,9 @@ def main():
     print("Image 1 processed succesfully.")
 
     # Overlay 2 trajectories onto the representation space
-    trajs = sampling_states.sample_trajectories(MINARI_DATASET, n_episodes=2, ep_len=200)
-    t1 = trajs[0][0].observations["observation"]
-    t2 = trajs[1][0].observations["observation"]
+    trajs = sampling_states.sample_trajectories(og_dataset, n_episodes=2, ep_len=200)
+    t1 = trajs[0]
+    t2 = trajs[1]
 
     pca_t1 = pca.pca_transform(t1, pca_dict,  model=cl_model, has_representation=False)
     pca_t2 = pca.pca_transform(t2, pca_dict,  model=cl_model, has_representation=False)
@@ -140,19 +122,19 @@ def main():
 
     # Get beta model
     beta_model = LearnedBetaModel(cmhn=mhn)
-    pretrained_model_file = os.path.join(PROJECT_ROOT+ "/trained_models", BETA_MODEL_NAME) 
+    pretrained_model_file = os.path.join(PROJECT_ROOT+ "/trained_models", BETA_MODEL_NAME)
     state_dict = torch.load(pretrained_model_file, map_location="cpu")
     beta_model.load_state_dict(state_dict)
 
-    # Input subsampled states to get learned representations 
+    # Input subsampled states to get learned representations
     subsampled_states = states[idx]
-    with torch.no_grad(): 
+    with torch.no_grad():
         z_reps = cl_model(torch.as_tensor(subsampled_states, dtype=torch.float32))
         BETA = beta_model.get_beta(z_reps)
-    
+
     # Get the u-values (output from hopfield network)
     u, u_norm = mhn.run(z_reps, z_reps, beta=BETA, run_as_batch=True)
-    
+
     # Remove duplicate/similar u-values to obtain cluster points (fixed points)
     unique_mask = remove_dupes(u_norm, k=1000, threshold=0.5)
     unique_u = u[unique_mask]
@@ -168,44 +150,5 @@ def main():
     plt.close()
     print("Image 3 processed succesfully.")
 
-    #----------------------------------------------------------------------------------------------------------
-    # Visualizing Clusters on the Real Maze Environment
-    #----------------------------------------------------------------------------------------------------------
-
-    # Matching unique_u values to their closest real state (using euclidean distance as the metric)
-    min_dist = float("inf")
-    mask = np.zeros(shape=(10_000), dtype=bool)
-
-    for i in range(unique_u.size(0)):
-        saved_idx = 0
-        min_dist = float('inf')
-        for j in range(len(z_reps)):
-            euclidean_dist = np.linalg.norm(unique_u[i] - z_reps[j])
-            if euclidean_dist < min_dist: 
-                min_dist = euclidean_dist
-                saved_idx = j
-        mask[saved_idx] = True
-
-    clustered_states = subsampled_states[mask]
-    clustered_states.shape
-
-    cluster_pts = clustered_states[:, :2]
-
-    fig, axs = plt.subplots(1, 2, figsize=(12,5))
-    axs[0].scatter(subsampled_pca_states[:, 0], subsampled_pca_states[:, 1], s=1, c="lightblue", alpha=0.25)
-    axs[0].scatter(pca_u[:, 0], pca_u[:, 1], s=8, c= "red", alpha=0.5)
-    axs[0].set_title("Learned Representation Space")
-    axs[0].axis("off")
-
-    axs[1].imshow(MINARI_POINTMAZE_LARGE_MAP, cmap="gray_r", origin="upper",
-           extent=[XMIN, XMAX, YMIN, YMAX])
-    axs[1].scatter(x=cluster_pts[:, 0], y=cluster_pts[:, 1], s=15, c="r")
-    axs[1].set_title("Cluster Points Overlaid on Maze (top-down)")
-    axs[1].axis("off")
-    output_path = os.path.join(FOLDER_PATH, "representation_maze.png")
-    fig.savefig(output_path)
-    plt.close(fig)
-    print("Image 4 processed succesfully.")
-
-if __name__ == "__main__": 
+if __name__ == "__main__":
     main()

@@ -1,0 +1,37 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "contrastive-learning-rl"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.5",
+    "torchaudio>=2.5",
+    "torchvision>=0.20",
+    "pytorch-lightning>=2.5",
+    "numpy>=2.0",
+    "ogbench>=1.2",
+    "hopfield-layers @ git+https://github.com/ml-jku/hopfield-layers",
+    "gymnasium>=1.0",
+    "wandb>=0.22",
+    "matplotlib>=3.9",
+    "scikit-learn>=1.6",
+    "faiss-cpu",
+    "h5py",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+test = [
+    "umap-learn",
+    "pandas",
+    "seaborn",
+]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]

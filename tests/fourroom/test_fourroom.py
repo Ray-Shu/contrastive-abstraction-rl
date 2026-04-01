@@ -321,10 +321,8 @@ def train_beta(cl_model: mlpCL, all_states: np.ndarray,
     )
 
     train_states, val_states = split_data(all_states, split_val=0.8)
-    # StatesDataset converts raw states → z internally via cl_model.
-    # minari_dataset=None is safe: that arg is only used when iterate_thru_dataset=True.
-    train_ds = StatesDataset(cl_model=cl_model, minari_dataset=None, data=train_states)
-    val_ds   = StatesDataset(cl_model=cl_model, minari_dataset=None, data=val_states)
+    train_ds = StatesDataset(cl_model=cl_model, data=train_states)
+    val_ds   = StatesDataset(cl_model=cl_model, data=val_states)
 
     train_loader = data.DataLoader(train_ds, batch_size=BETA_BATCH, shuffle=True,  drop_last=True)
     val_loader   = data.DataLoader(val_ds,   batch_size=BETA_BATCH, shuffle=False, drop_last=False)

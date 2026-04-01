@@ -2,7 +2,7 @@ import os
 import sys
 import argparse
 
-import minari
+import ogbench
 import torch
 import torch.utils.data as data
 
@@ -14,15 +14,13 @@ from src.data.StatesDataset import StatesDataset
 
 from src.trainers.beta_trainer import train_beta_model
 
-from src.utils.sampling_states import sample_states 
+from src.utils.sampling_states import sample_states
 from src.utils.tensor_utils import split_data
 
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
 
-# Globals
-MINARI_DATASET = minari.load_dataset("D4RL/pointmaze/large-v2")
 PROJECT_ROOT = os.getcwd()
 
 FOLDER_NAME = "beta_models"
@@ -36,6 +34,7 @@ FILENAME = RUN_NAME
 DEVICE = "mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu"
 
 DEFAULT_CONFIG = {
+        "og_dataset_name": "antmaze-large-navigate-v0",
         "num_states": 1_000_000,
         "lr": 1e-3,
         "temperature": 0.03796123348109251,
@@ -53,6 +52,7 @@ DEFAULT_CONFIG = {
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Train Beta Model")
+    parser.add_argument("--og_dataset_name", type=str, default=DEFAULT_CONFIG["og_dataset_name"])
     parser.add_argument("--num_states", type=int, default=DEFAULT_CONFIG["num_states"])
     parser.add_argument("--lr", type=float, default=DEFAULT_CONFIG["lr"])
     parser.add_argument("--temperature", type=float, default=DEFAULT_CONFIG["temperature"])
@@ -69,35 +69,38 @@ def parse_args():
 
     return parser.parse_args()
 
-def main(): 
+def main():
     args = parse_args()
     CONFIG = vars(args)
 
     # Load trained CL model
     model_name = "laplace_cos_sim-v1.ckpt"
-    pretrained_model_file = os.path.join(PROJECT_ROOT+ "/trained_models", model_name) 
+    pretrained_model_file = os.path.join(PROJECT_ROOT+ "/trained_models", model_name)
 
-    if os.path.isfile(pretrained_model_file): 
-        print(f"Found pretrained model at {pretrained_model_file}, loading...") 
+    if os.path.isfile(pretrained_model_file):
+        print(f"Found pretrained model at {pretrained_model_file}, loading...")
         cl_model = mlpCL.load_from_checkpoint(pretrained_model_file, map_location=torch.device(DEVICE))
     else:
         print("Model not found...")
 
+    # Load OGBench dataset
+    _, og_dataset, _ = ogbench.make_env_and_datasets(CONFIG["og_dataset_name"])
+
     # Preprocessing step to get train/val data
     print(f'Sampling {CONFIG["num_states"]} states...')
-    data = sample_states(dataset=MINARI_DATASET, num_states=CONFIG["num_states"])
+    data = sample_states(dataset=og_dataset, num_states=CONFIG["num_states"])
     states = data["states"]
-    train, val = split_data(states, split_val=0.8) 
-    train_ds = StatesDataset(cl_model=cl_model, minari_dataset=MINARI_DATASET, data=train)
-    val_ds = StatesDataset(cl_model=cl_model, minari_dataset=MINARI_DATASET, data=val)
+    train, val = split_data(states, split_val=0.8)
+    train_ds = StatesDataset(cl_model=cl_model, data=train)
+    val_ds = StatesDataset(cl_model=cl_model, data=val)
     print("Sampling finished!")
 
     wandb_logger = WandbLogger(
-            project=PROJECT_NAME, 
-            name=RUN_NAME, 
-            save_dir = PROJECT_ROOT, 
+            project=PROJECT_NAME,
+            name=RUN_NAME,
+            save_dir = PROJECT_ROOT,
             log_model=True,
-            config = CONFIG) 
+            config = CONFIG)
 
     objective = ContrastiveHopfieldObjective(
         temperature=CONFIG["temperature"],
@@ -124,5 +127,5 @@ def main():
         hopfield_steps_eps=CONFIG["hopfield_steps_eps"],
     )
 
-if __name__ == "__main__": 
+if __name__ == "__main__":
     main()

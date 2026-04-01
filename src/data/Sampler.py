@@ -18,7 +18,7 @@ class Sampler():
         self.T = T
         self.dist = dist
         self.add_action = add_action
-        self.total_episodes = T.get_total_episodes()
+        self.total_episodes = T.get_num_trajectories()
         self.T.generate_trajectories(n_trajectories=self.total_episodes, add_action=add_action)
 
         # Hyperparameters
