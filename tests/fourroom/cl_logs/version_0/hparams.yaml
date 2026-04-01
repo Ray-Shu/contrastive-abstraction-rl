@@ -1,0 +1,10 @@
+device: cpu
+h1: 256
+h2: 128
+h3: 64
+h4: 32
+input_dim: 2
+lr: 0.001
+max_epochs: 100
+temperature: 30
+weight_decay: 1.0e-05

@@ -3,7 +3,7 @@ import torch.utils.data as data
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
 
-def train_beta_model(bm_model, train_ds, val_ds, batch_size, logger, checkpoint_path, max_epochs=1000, device="cpu", filename="best_model", **kwargs):
+def train_beta_model(bm_model, train_ds, val_ds, batch_size, logger, checkpoint_path, max_epochs=1000, device="cpu", filename="best_model", plot_save_path=None, plot_title="Beta Model — Training Curve", **kwargs):
     # Create model checkpoints based on the top5 metric
     filename = kwargs.pop("filename", filename) 
     
@@ -33,5 +33,14 @@ def train_beta_model(bm_model, train_ds, val_ds, batch_size, logger, checkpoint_
 
     print("Best model path:", checkpoint_callback.best_model_path)
     model = bm_model.load_from_checkpoint(checkpoint_callback.best_model_path, objective=objective)
+
+    if plot_save_path is not None:
+        from src.utils.plot_learning_curve import plot_learning_curve
+        plot_learning_curve(
+            log_dir=logger.save_dir,
+            name=logger.name,
+            title=plot_title,
+            save_path=plot_save_path,
+        )
 
     return model

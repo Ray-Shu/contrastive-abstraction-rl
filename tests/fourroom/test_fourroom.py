@@ -7,9 +7,6 @@ sys.path.insert(0, PROJECT_ROOT)
 import numpy as np
 import torch
 import torch.nn.functional as F
-import torch.utils.data as data
-import glob
-import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -18,8 +15,6 @@ import matplotlib.patches as mpatches
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from pytorch_lightning.loggers import CSVLogger
-from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
-import pytorch_lightning as pl
 
 from src.data.trajectories import TrajectorySet
 from src.data.sampler import Sampler
@@ -29,6 +24,7 @@ from src.models.cl_model import mlpCL
 from src.models.beta_model import LearnedBetaModel
 from src.models.beta_objective import ContrastiveHopfieldObjective
 from src.trainers.cl_trainer import train_cl
+from src.trainers.beta_trainer import train_beta_model
 from src.utils.trajectory_io import save_trajectories, load_trajectories
 from src.utils.tensor import split_data
 import umap
@@ -199,17 +195,17 @@ def _combined_scatter(z_2d: np.ndarray, u_2d: np.ndarray, labels: list,
     for lid in sorted(set(labels)):
         mask = labels_arr == lid
         ax.scatter(z_2d[mask, 0], z_2d[mask, 1],
-                   c=ROOM_COLORS[lid], marker="o",
-                   alpha=0.85, s=70, edgecolors="k", linewidths=0.4)
+                   c=ROOM_COLORS[lid], marker=".",
+                   alpha=0.85, s=30)
         ax.scatter(u_2d[mask, 0], u_2d[mask, 1],
                    c=ROOM_COLORS[lid], marker="D",
-                   alpha=0.55, s=55, edgecolors="k", linewidths=0.4)
+                   alpha=0.55, s=40, edgecolors="k", linewidths=0.4)
 
     # Legend: room colors + marker-type guide
     color_handles  = [mpatches.Patch(color=ROOM_COLORS[lid], label=ROOM_NAMES[lid])
                       for lid in sorted(ROOM_COLORS)]
     marker_handles = [
-        mlines.Line2D([], [], marker="o", color="gray", ls="None",
+        mlines.Line2D([], [], marker=".", color="gray", ls="None",
                       markersize=7, label="CL latent"),
         mlines.Line2D([], [], marker="D", color="gray", ls="None",
                       markersize=6, label="Hopfield abstract"),
@@ -263,37 +259,6 @@ def visualize_combined_umap(z: np.ndarray, u_norm: np.ndarray, labels: list,
     )
 
 
-def plot_learning_curve(log_dir: str, name: str, title: str, save_path: str) -> None:
-    """Read the most recent CSVLogger run and plot train/val NLL loss over epochs."""
-    versions = sorted(glob.glob(os.path.join(log_dir, name, "version_*")))
-    if not versions:
-        print(f"No logs found under {os.path.join(log_dir, name)}; skipping curve.")
-        return
-    metrics_path = os.path.join(versions[-1], "metrics.csv")
-    df = pd.read_csv(metrics_path)
-
-    fig, ax = plt.subplots(figsize=(7, 4))
-    for metric, label, color in [
-        ("train/nll_loss", "train loss", "tab:blue"),
-        ("val/nll_loss",   "val loss",   "tab:orange"),
-    ]:
-        if metric in df.columns:
-            subset = df[["epoch", metric]].dropna()
-            # one point per epoch (last logged value within that epoch)
-            subset = subset.groupby("epoch")[metric].last().reset_index()
-            ax.plot(subset["epoch"], subset[metric], label=label, color=color)
-
-    ax.set_xlabel("Epoch")
-    ax.set_ylabel("NLL Loss")
-    ax.set_title(title, fontsize=13)
-    ax.legend(fontsize=9)
-    ax.grid(True, alpha=0.3)
-    fig.tight_layout()
-    fig.savefig(save_path, dpi=150)
-    plt.close(fig)
-    print(f"Saved: {save_path}")
-
-
 # ---------------------------------------------------------------------------
 # Beta model helpers
 # ---------------------------------------------------------------------------
@@ -307,14 +272,9 @@ def collect_all_states(tset: TrajectorySet) -> np.ndarray:
 
 
 def train_beta(cl_model: mlpCL, all_states: np.ndarray,
-               checkpoint_path: str, logger, device: str) -> LearnedBetaModel:
-    """
-    Train LearnedBetaModel on CL latents of four-room trajectories.
-
-    Uses an inline loop instead of beta_trainer.train_beta_model() because that
-    function's load_from_checkpoint call omits `objective` (excluded from
-    save_hyperparameters), causing a crash. Here we pass it explicitly on reload.
-    """
+               checkpoint_path: str, logger, device: str,
+               plot_save_path=None, plot_title="Beta Model — Training Curve") -> LearnedBetaModel:
+    """Train LearnedBetaModel on CL latents of four-room trajectories."""
     objective = ContrastiveHopfieldObjective(
         temperature=BETA_TEMPERATURE,
         masking_ratio=BETA_MASKING_RATIO,
@@ -324,43 +284,24 @@ def train_beta(cl_model: mlpCL, all_states: np.ndarray,
     train_ds = StatesDataset(cl_model=cl_model, data=train_states)
     val_ds   = StatesDataset(cl_model=cl_model, data=val_states)
 
-    train_loader = data.DataLoader(train_ds, batch_size=BETA_BATCH, shuffle=True,  drop_last=True)
-    val_loader   = data.DataLoader(val_ds,   batch_size=BETA_BATCH, shuffle=False, drop_last=False)
-
-    checkpoint_callback = ModelCheckpoint(
-        dirpath=checkpoint_path,
-        filename="best_beta_fourroom",
-        save_top_k=1,
-        save_weights_only=True,
-        mode="max",
-        monitor="val/top1",
-    )
-    trainer = pl.Trainer(
-        default_root_dir=checkpoint_path,
+    return train_beta_model(
+        bm_model=LearnedBetaModel,
+        train_ds=train_ds,
+        val_ds=val_ds,
+        batch_size=BETA_BATCH,
         logger=logger,
-        accelerator="mps" if torch.backends.mps.is_available()
-                    else "cuda" if torch.cuda.is_available()
-                    else "cpu",
-        devices=1,
-        max_epochs=BETA_EPOCHS,
-        callbacks=[checkpoint_callback, LearningRateMonitor("epoch")],
-    )
-
-    pl.seed_everything(10)
-    beta_model = LearnedBetaModel(
-        objective=objective,
-        hopfield_scale=BETA_HOPFIELD_SCALE,
-        lr=BETA_LR,
-        weight_decay=BETA_WEIGHT_DECAY,
+        checkpoint_path=checkpoint_path,
         max_epochs=BETA_EPOCHS,
         device=device,
-    )
-    trainer.fit(beta_model, train_loader, val_loader)
+        filename="best_beta_fourroom",
+        plot_save_path=plot_save_path,
+        plot_title=plot_title,
 
-    print("Best beta model path:", checkpoint_callback.best_model_path)
-    return LearnedBetaModel.load_from_checkpoint(
-        checkpoint_callback.best_model_path,
+        # kwargs forwarded to LearnedBetaModel
         objective=objective,
+        lr=BETA_LR,
+        weight_decay=BETA_WEIGHT_DECAY,
+        hopfield_scale=BETA_HOPFIELD_SCALE,
     )
 
 
@@ -455,36 +396,37 @@ def main():
             temperature=CL_TEMPERATURE,
             lr=CL_LR,
             weight_decay=CL_WEIGHT_DECAY,
+            plot_save_path=os.path.join(PLOTS_DIR, "cl_learning_curve.png"),
+            plot_title="CL Model — Training Curve (four-room)",
         )
     cl_model = cl_model.to(torch.device(DEVICE))
-
-    plot_learning_curve(
-        log_dir=TESTS_DIR, name="cl_logs",
-        title=f"CL Model — Training Curve (four-room)",
-        save_path=os.path.join(PLOTS_DIR, "cl_learning_curve.png"),
-    )
 
     # -- Step 4: collect trajectory states (Hopfield memory) -----------------
     print("Collecting all trajectory states...")
     all_states = collect_all_states(tset)
     print(f"  Total states: {all_states.shape[0]}")
 
-    # -- Step 5: train beta model --------------------------------------------
-    print(f"Training beta model ({BETA_EPOCHS} epochs)...")
-    beta_model = train_beta(
-        cl_model=cl_model,
-        all_states=all_states,
-        checkpoint_path=CHECKPOINT_PATH,
-        logger=CSVLogger(save_dir=TESTS_DIR, name="beta_logs"),
-        device=DEVICE,
-    )
+    # -- Step 5: train or reuse beta model -----------------------------------
+    beta_ckpt = os.path.join(CHECKPOINT_PATH, "best_beta_fourroom.ckpt")
+    if os.path.exists(beta_ckpt):
+        print(f"Reusing beta checkpoint: {beta_ckpt}")
+        objective = ContrastiveHopfieldObjective(
+            temperature=BETA_TEMPERATURE,
+            masking_ratio=BETA_MASKING_RATIO,
+        )
+        beta_model = LearnedBetaModel.load_from_checkpoint(beta_ckpt, objective=objective)
+    else:
+        print(f"Training beta model ({BETA_EPOCHS} epochs)...")
+        beta_model = train_beta(
+            cl_model=cl_model,
+            all_states=all_states,
+            checkpoint_path=CHECKPOINT_PATH,
+            logger=CSVLogger(save_dir=TESTS_DIR, name="beta_logs"),
+            device=DEVICE,
+            plot_save_path=os.path.join(PLOTS_DIR, "beta_learning_curve.png"),
+            plot_title="Beta Model — Training Curve (four-room)",
+        )
     beta_model = beta_model.to(torch.device(DEVICE))
-
-    plot_learning_curve(
-        log_dir=TESTS_DIR, name="beta_logs",
-        title=f"Beta Model — Training Curve (four-room)",
-        save_path=os.path.join(PLOTS_DIR, "beta_learning_curve.png"),
-    )
 
     # -- Step 6: extract latents and abstract states -------------------------
     print("Extracting latents and abstract states...")

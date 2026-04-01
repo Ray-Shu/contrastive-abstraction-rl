@@ -17,7 +17,7 @@ class ResamplePairsCallback(pl.Callback):
 """
 
 
-def train_cl(cl_model, train_ds, val_ds, batch_size, logger, checkpoint_path, max_epochs=1000, device="cpu", filename= "best_model", **kwargs):
+def train_cl(cl_model, train_ds, val_ds, batch_size, logger, checkpoint_path, max_epochs=1000, device="cpu", filename="best_model", plot_save_path=None, plot_title="CL Model — Training Curve", **kwargs):
     # Create model checkpoints based on the top5 metric
     filename = kwargs.pop("filename", filename) 
     
@@ -47,5 +47,14 @@ def train_cl(cl_model, train_ds, val_ds, batch_size, logger, checkpoint_path, ma
 
     print("Best model path:", checkpoint_callback.best_model_path)
     model = cl_model.load_from_checkpoint(checkpoint_callback.best_model_path)
-    
-    return model 
+
+    if plot_save_path is not None:
+        from src.utils.plot_learning_curve import plot_learning_curve
+        plot_learning_curve(
+            log_dir=logger.save_dir,
+            name=logger.name,
+            title=plot_title,
+            save_path=plot_save_path,
+        )
+
+    return model

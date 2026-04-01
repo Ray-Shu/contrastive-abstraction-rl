@@ -75,7 +75,8 @@ def make_subset(dataset: dict, n: int) -> dict:
     return {k: v[:n] for k, v in dataset.items()}
 
 
-def train_beta(cl_model, states, checkpoint_path, logger, device):
+def train_beta(cl_model, states, checkpoint_path, logger, device,
+               plot_save_path=None, plot_title="Beta Model — Training Curve"):
     """Train LearnedBetaModel on CL latents from the given states array."""
     objective = ContrastiveHopfieldObjective(
         temperature=BETA_TEMPERATURE,
@@ -96,6 +97,8 @@ def train_beta(cl_model, states, checkpoint_path, logger, device):
         max_epochs=BETA_EPOCHS,
         device=device,
         filename="best_beta_ogbench",
+        plot_save_path=plot_save_path,
+        plot_title=plot_title,
 
         # kwargs forwarded to LearnedBetaModel
         objective=objective,
@@ -217,6 +220,8 @@ def main():
             lr=CL_LR,
             temperature=CL_TEMPERATURE,
             weight_decay=CL_WEIGHT_DECAY,
+            plot_save_path=os.path.join(PLOTS_DIR, "cl_learning_curve.png"),
+            plot_title="CL Model — Training Curve (OGBench)",
         )
     cl_model = cl_model.to(DEVICE)
 
@@ -239,6 +244,8 @@ def main():
             checkpoint_path=CHECKPOINTS_DIR,
             logger=CSVLogger(save_dir=TESTS_DIR, name="beta_logs"),
             device=DEVICE,
+            plot_save_path=os.path.join(PLOTS_DIR, "beta_learning_curve.png"),
+            plot_title="Beta Model — Training Curve (OGBench)",
         )
     beta_model = beta_model.to(DEVICE)
 
