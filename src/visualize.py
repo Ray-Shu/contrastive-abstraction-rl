@@ -47,7 +47,7 @@ def parse_args():
     parser.add_argument("--subsample_size", type=int, default=DEFAULT_CONFIG["subsample_size"])
     parser.add_argument("--total_states", type=int, default=DEFAULT_CONFIG["total_states"])
     parser.add_argument("--cl_model_path", type=str, default=None,
-                        help="Path to CL checkpoint. Overrides --distribution lookup in trained_models/.")
+                        help="Path to CL checkpoint. Overrides --distribution lookup in checkpoints/.")
     parser.add_argument("--beta_model_path", type=str, default=None,
                         help="Path to beta model checkpoint.")
     parser.add_argument("--output_dir", type=str, default=DEFAULT_CONFIG["output_dir"],
@@ -74,7 +74,7 @@ def main():
             "u": "uniform_resaved.ckpt",
         }
         model_name = dist_to_name.get(CONFIG["distribution"], "laplace_cos_sim-v1.ckpt")
-        cl_model_file = os.path.join(PROJECT_ROOT, "trained_models", model_name)
+        cl_model_file = os.path.join(PROJECT_ROOT, "checkpoints", model_name)
 
     if not os.path.isfile(cl_model_file):
         raise FileNotFoundError(f"CL model not found at {cl_model_file}")

@@ -29,7 +29,7 @@ python src/train_cl.py --og_dataset_name antmaze-large-navigate-v0 --distributio
 **Stage 2 — Train beta model (requires pre-trained CL model):**
 ```bash
 python src/train_beta.py
-# loads trained_models/laplace_cos_sim-v1.ckpt by default
+# loads checkpoints/laplace_cos_sim-v1.ckpt by default
 # saves checkpoint to beta_models/<filename>.ckpt
 ```
 
@@ -78,10 +78,10 @@ latent_dataset (embeds raw states via frozen CL) → LearnedBetaModel
 
 ### Checkpoints & Pre-trained Models
 
-Pre-trained CL checkpoints in `trained_models/` for all four distributions. Load via:
+Pre-trained CL checkpoints in `checkpoints/` for all four distributions. Load via:
 ```python
-mlpCL.load_from_checkpoint("trained_models/laplace_cos_sim-v1.ckpt")
-LearnedBetaModel.load_from_checkpoint("trained_models/beta_model.ckpt")
+mlpCL.load_from_checkpoint("checkpoints/laplace_cos_sim-v1.ckpt")
+LearnedBetaModel.load_from_checkpoint("checkpoints/beta_model.ckpt")
 ```
 
 ## Preferences

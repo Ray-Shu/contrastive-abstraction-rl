@@ -24,7 +24,7 @@ from pytorch_lightning.loggers import WandbLogger
 PROJECT_ROOT = os.getcwd()
 
 DEFAULT_CHECKPOINT_DIR = os.path.join(PROJECT_ROOT, "beta_models")
-DEFAULT_CL_MODEL_PATH = os.path.join(PROJECT_ROOT, "trained_models", "laplace_cos_sim-v1.ckpt")
+DEFAULT_CL_MODEL_PATH = os.path.join(PROJECT_ROOT, "checkpoints", "laplace_cos_sim-v1.ckpt")
 
 PROJECT_NAME = "Learning Beta Model"
 RUN_NAME = "run"

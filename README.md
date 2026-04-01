@@ -33,5 +33,5 @@ python tests/fourroom/test_fourroom.py
 Trains both models end-to-end on a synthetic 9×9 four-room grid and outputs PCA/UMAP plots to `tests/fourroom/plots/`.
 
 ## Additional Info
-- Pre-trained checkpoints for all four distributions and the beta model are in `trained_models/`.
+- Pre-trained checkpoints for all four distributions and the beta model are in `checkpoints/`.
 - See this [pdf](https://github.com/user-attachments/files/21882859/Reproducing_the__Contrastive_Abstraction_for_Reinforcement_Learning__Paper.pdf) for in-depth math and background.
