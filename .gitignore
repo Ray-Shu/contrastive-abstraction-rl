@@ -1,21 +1,16 @@
 # Virtual Environments 
 CL_RL
 venv
+.venv
 
-# Jupyter 
-test.ipynb
-test_notebooks/
-#*.ipynb
-##!notebooks/*.ipynb
-#!cl_main.ipynb
-#!beta_main.ipynb
-#!visualizations/*.ipynb
+# tests
+.test_notebooks/
+.test_plots/
+.test_models/
+.test_data/
 
 # wandb 
 wandb/
-
-# Models 
-!train_models
 
 # py 
 __pycache__
@@ -23,8 +18,6 @@ checkpoint_fix.py
 *.pyc
 
 # misc
-test_plots/
 readme_etc.txt
-conversation_archive.md
 .claude
-.vscode
+.vscode/

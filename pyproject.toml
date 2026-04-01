@@ -21,12 +21,8 @@ dependencies = [
     "faiss-cpu",
     "h5py",
     "tqdm",
-]
-
-[project.optional-dependencies]
-test = [
-    "umap-learn",
     "pandas",
+    "umap-learn",
     "seaborn",
 ]
 

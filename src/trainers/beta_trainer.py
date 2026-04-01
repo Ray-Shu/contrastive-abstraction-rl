@@ -25,11 +25,13 @@ def train_beta_model(bm_model, train_ds, val_ds, batch_size, logger, checkpoint_
     train_loader = data.DataLoader(dataset=train_ds, batch_size=batch_size, shuffle=True, drop_last=True)
     val_loader = data.DataLoader(dataset=val_ds, batch_size=batch_size, shuffle=False, drop_last=False)
 
+    objective = kwargs.get('objective')
+
     pl.seed_everything(10)
     model = bm_model(max_epochs=max_epochs, device=device, **kwargs)
     trainer.fit(model, train_loader, val_loader)
 
     print("Best model path:", checkpoint_callback.best_model_path)
-    model = bm_model.load_from_checkpoint(checkpoint_callback.best_model_path)
-    
-    return model 
+    model = bm_model.load_from_checkpoint(checkpoint_callback.best_model_path, objective=objective)
+
+    return model

@@ -21,16 +21,16 @@ from pytorch_lightning.loggers import CSVLogger
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
 import pytorch_lightning as pl
 
-from src.data.SyntheticTrajectorySet import SyntheticTrajectorySet
-from src.data.Sampler import Sampler
-from src.data.DatasetCL import DatasetCL
-from src.data.StatesDataset import StatesDataset
+from src.data.trajectories import TrajectorySet
+from src.data.sampler import Sampler
+from src.data.cl_dataset import DatasetCL
+from src.data.latent_dataset import StatesDataset
 from src.models.cl_model import mlpCL
 from src.models.beta_model import LearnedBetaModel
-from src.models.beta_objectives import ContrastiveHopfieldObjective
+from src.models.beta_objective import ContrastiveHopfieldObjective
 from src.trainers.cl_trainer import train_cl
 from src.utils.trajectory_io import save_trajectories, load_trajectories
-from src.utils.tensor_utils import split_data
+from src.utils.tensor import split_data
 import umap
 
 # =============================================================================
@@ -126,7 +126,7 @@ class FourRoomGrid:
 
 def generate_and_save(env: FourRoomGrid, save_path: str) -> None:
     np.random.seed(DATA_SEED)
-    tset = SyntheticTrajectorySet(n_trajectories=N_TRAJECTORIES)
+    tset = TrajectorySet()
 
     for _ in range(N_TRAJECTORIES):
         state   = env.random_valid_state()
@@ -298,7 +298,7 @@ def plot_learning_curve(log_dir: str, name: str, title: str, save_path: str) -> 
 # Beta model helpers
 # ---------------------------------------------------------------------------
 
-def collect_all_states(tset: SyntheticTrajectorySet) -> np.ndarray:
+def collect_all_states(tset: TrajectorySet) -> np.ndarray:
     """Concatenate every raw state from all trajectories. Returns [N_total, state_dim]."""
     return np.vstack([
         tset.get_trajectory(i)[0]["states"]

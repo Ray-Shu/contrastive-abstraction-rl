@@ -6,7 +6,7 @@ import torch.optim as optim
 import pytorch_lightning as pl
 
 from hflayers import Hopfield
-from src.models.beta_objectives import BetaObjective
+from src.models.beta_objective import BetaObjective
 
 
 class LearnedBetaModel(pl.LightningModule):

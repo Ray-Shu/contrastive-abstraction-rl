@@ -1,6 +1,5 @@
 import numpy as np
-from src.data.TrajectorySet import TrajectorySet
-from src.data.SyntheticTrajectorySet import SyntheticTrajectorySet
+from src.data.trajectories import TrajectorySet
 
 
 def save_trajectories(tset: TrajectorySet, path: str) -> None:
@@ -22,19 +21,48 @@ def save_trajectories(tset: TrajectorySet, path: str) -> None:
     np.savez_compressed(path, **arrays)
 
 
-def load_trajectories(path: str) -> SyntheticTrajectorySet:
+def load_trajectories(path: str) -> TrajectorySet:
     """
-    Load trajectories from a .npz file into a SyntheticTrajectorySet.
+    Load trajectories from a .npz file into a TrajectorySet.
 
-    Returns a SyntheticTrajectorySet populated with {'states', 'actions'} dicts,
+    Returns a TrajectorySet populated with {'states', 'actions'} dicts,
     ready to pass to Sampler.
     """
     data = np.load(path)
     n = int(data["n_trajectories"])
-    tset = SyntheticTrajectorySet(n_trajectories=n)
+    tset = TrajectorySet()
     for i in range(n):
         tset.add_trajectory({
             "states":  data[f"traj_{i}_states"],
             "actions": data[f"traj_{i}_actions"],
+        })
+    return tset
+
+
+def ogbench_to_trajectory_set(dataset: dict) -> TrajectorySet:
+    """
+    Convert an OGBench dataset dict into a TrajectorySet.
+
+    Splits the flat observations/actions arrays into per-episode dicts
+    using the 'terminals' array to find episode boundaries.
+    """
+    observations = dataset["observations"]
+    actions = dataset["actions"]
+    terminals = dataset["terminals"]
+
+    end_indices = np.where(terminals == 1)[0]
+    starts = np.concatenate([[0], end_indices[:-1] + 1])
+    ends   = end_indices + 1
+
+    # Include any trailing steps after the last terminal as a final episode.
+    if len(ends) == 0 or ends[-1] < len(observations):
+        starts = np.concatenate([starts, [ends[-1] if len(ends) > 0 else 0]])
+        ends   = np.concatenate([ends,   [len(observations)]])
+
+    tset = TrajectorySet()
+    for start, end in zip(starts, ends):
+        tset.add_trajectory({
+            "states":  observations[start:end],
+            "actions": actions[start:end],
         })
     return tset
