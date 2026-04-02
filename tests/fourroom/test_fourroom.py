@@ -22,7 +22,7 @@ from src.data.cl_dataset import DatasetCL
 from src.data.latent_dataset import StatesDataset
 from src.models.cl_model import mlpCL
 from src.models.beta_model import LearnedBetaModel
-from src.models.beta_objective import ContrastiveHopfieldObjective
+from src.models.beta_objective import DiscriminativeHopfieldObjective
 from src.trainers.cl_trainer import train_cl
 from src.trainers.beta_trainer import train_beta_model
 from src.utils.trajectory_io import save_trajectories, load_trajectories
@@ -275,10 +275,7 @@ def train_beta(cl_model: mlpCL, all_states: np.ndarray,
                checkpoint_path: str, logger, device: str,
                plot_save_path=None, plot_title="Beta Model — Training Curve") -> LearnedBetaModel:
     """Train LearnedBetaModel on CL latents of four-room trajectories."""
-    objective = ContrastiveHopfieldObjective(
-        temperature=BETA_TEMPERATURE,
-        masking_ratio=BETA_MASKING_RATIO,
-    )
+    objective = DiscriminativeHopfieldObjective(masking_ratio=BETA_MASKING_RATIO)
 
     train_states, val_states = split_data(all_states, split_val=0.8)
     train_ds = StatesDataset(cl_model=cl_model, data=train_states)
@@ -350,9 +347,10 @@ def extract_latents_and_abstract_states(
 
 def main():
     TESTS_DIR       = os.path.dirname(os.path.abspath(__file__))
-    DATA_PATH       = os.path.join(TESTS_DIR, "data",        "fourroom.npz")
-    CHECKPOINT_PATH = os.path.join(TESTS_DIR, "checkpoints")
-    PLOTS_DIR       = os.path.join(TESTS_DIR, "plots")
+    RESULTS_DIR     = os.path.join(TESTS_DIR, ".test_results")
+    DATA_PATH       = os.path.join(RESULTS_DIR, "data",        "fourroom.npz")
+    CHECKPOINT_PATH = os.path.join(RESULTS_DIR, "checkpoints")
+    PLOTS_DIR       = os.path.join(RESULTS_DIR, "plots")
     os.makedirs(os.path.dirname(DATA_PATH), exist_ok=True)
     os.makedirs(CHECKPOINT_PATH, exist_ok=True)
     os.makedirs(PLOTS_DIR,       exist_ok=True)
@@ -387,7 +385,7 @@ def main():
             train_ds=train_ds,
             val_ds=val_ds,
             batch_size=CL_BATCH,
-            logger=CSVLogger(save_dir=TESTS_DIR, name="cl_logs"),
+            logger=CSVLogger(save_dir=RESULTS_DIR, name="cl_logs"),
             checkpoint_path=CHECKPOINT_PATH,
             max_epochs=CL_EPOCHS,
             device=DEVICE,
@@ -410,10 +408,7 @@ def main():
     beta_ckpt = os.path.join(CHECKPOINT_PATH, "best_beta_fourroom.ckpt")
     if os.path.exists(beta_ckpt):
         print(f"Reusing beta checkpoint: {beta_ckpt}")
-        objective = ContrastiveHopfieldObjective(
-            temperature=BETA_TEMPERATURE,
-            masking_ratio=BETA_MASKING_RATIO,
-        )
+        objective = DiscriminativeHopfieldObjective(masking_ratio=BETA_MASKING_RATIO)
         beta_model = LearnedBetaModel.load_from_checkpoint(beta_ckpt, objective=objective)
     else:
         print(f"Training beta model ({BETA_EPOCHS} epochs)...")
@@ -421,7 +416,7 @@ def main():
             cl_model=cl_model,
             all_states=all_states,
             checkpoint_path=CHECKPOINT_PATH,
-            logger=CSVLogger(save_dir=TESTS_DIR, name="beta_logs"),
+            logger=CSVLogger(save_dir=RESULTS_DIR, name="beta_logs"),
             device=DEVICE,
             plot_save_path=os.path.join(PLOTS_DIR, "beta_learning_curve.png"),
             plot_title="Beta Model — Training Curve (four-room)",

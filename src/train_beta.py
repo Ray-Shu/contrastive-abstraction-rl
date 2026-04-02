@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 import argparse
 
 import ogbench
@@ -8,7 +9,7 @@ import torch.utils.data as data
 
 from src.models.cl_model import mlpCL
 from src.models.beta_model import LearnedBetaModel
-from src.models.beta_objective import ContrastiveHopfieldObjective
+from src.models.beta_objective import ContrastiveHopfieldObjective, DiscriminativeHopfieldObjective
 
 from src.data.latent_dataset import StatesDataset
 
@@ -16,14 +17,14 @@ from src.trainers.beta_trainer import train_beta_model
 
 from src.utils.sampling import sample_states
 from src.utils.tensor import split_data
+from src.utils.plot_learning_curve import plot_learning_curve
 
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
-from pytorch_lightning.loggers import WandbLogger
+from pytorch_lightning.loggers import WandbLogger, CSVLogger
 
 PROJECT_ROOT = os.getcwd()
 
-DEFAULT_CHECKPOINT_DIR = os.path.join(PROJECT_ROOT, "beta_models")
 DEFAULT_CL_MODEL_PATH = os.path.join(PROJECT_ROOT, "checkpoints", "laplace_cos_sim-v1.ckpt")
 
 PROJECT_NAME = "Learning Beta Model"
@@ -32,6 +33,7 @@ FILENAME = RUN_NAME
 DEVICE = "mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu"
 
 DEFAULT_CONFIG = {
+        "exp_name": RUN_NAME,
         "og_dataset_name": "antmaze-large-navigate-v0",
         "num_states": 1_000_000,
         "lr": 1e-3,
@@ -45,11 +47,13 @@ DEFAULT_CONFIG = {
         "filename": FILENAME,
         "device": DEVICE,
         "minibatch": 4096,
-        "cl_model_distribution": "l"
+        "cl_model_distribution": "l",
+        "objective": "discriminative",
     }
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Train Beta Model")
+    parser.add_argument("--exp_name", type=str, default=DEFAULT_CONFIG["exp_name"], help="Experiment name; all outputs saved to results/<exp_name>/")
     parser.add_argument("--og_dataset_name", type=str, default=DEFAULT_CONFIG["og_dataset_name"])
     parser.add_argument("--num_states", type=int, default=DEFAULT_CONFIG["num_states"])
     parser.add_argument("--lr", type=float, default=DEFAULT_CONFIG["lr"])
@@ -65,7 +69,9 @@ def parse_args():
     parser.add_argument("--minibatch", type=int, default=DEFAULT_CONFIG["minibatch"])
     parser.add_argument("--cl_model_distribution", type=str, default=DEFAULT_CONFIG["cl_model_distribution"])
     parser.add_argument("--cl_model_path", type=str, default=None, help="Path to pre-trained CL model checkpoint")
-    parser.add_argument("--checkpoint_dir", type=str, default=None, help="Directory to save checkpoints (default: beta_models/)")
+    parser.add_argument("--objective", type=str, default=DEFAULT_CONFIG["objective"],
+                        choices=["contrastive", "discriminative"],
+                        help="Beta training objective: 'contrastive' (cosine sim + projection head) or 'discriminative' (pairwise FNN logits)")
 
     return parser.parse_args()
 
@@ -73,47 +79,63 @@ def main():
     args = parse_args()
     CONFIG = vars(args)
 
-    checkpoint_path = CONFIG["checkpoint_dir"] or DEFAULT_CHECKPOINT_DIR
-    os.makedirs(checkpoint_path, exist_ok=True)
+    # -- Output directories --------------------------------------------------
+    results_dir    = os.path.join(PROJECT_ROOT, "results", CONFIG["exp_name"])
+    checkpoint_dir = os.path.join(results_dir, "checkpoints")
+    logs_dir       = os.path.join(results_dir, "logs")
+    plots_dir      = os.path.join(results_dir, "plots")
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    os.makedirs(logs_dir,       exist_ok=True)
+    os.makedirs(plots_dir,      exist_ok=True)
 
-    # Load trained CL model
+    # -- Save config ---------------------------------------------------------
+    with open(os.path.join(results_dir, "config.json"), "w") as f:
+        json.dump(CONFIG, f, indent=2)
+
+    # -- Load trained CL model -----------------------------------------------
     cl_model_path = CONFIG["cl_model_path"] or DEFAULT_CL_MODEL_PATH
     if not os.path.isfile(cl_model_path):
         raise FileNotFoundError(f"CL model not found at {cl_model_path}. Train one first with train_cl.py.")
     print(f"Loading CL model from {cl_model_path}...")
     cl_model = mlpCL.load_from_checkpoint(cl_model_path, map_location=torch.device(DEVICE))
 
-    # Load OGBench dataset
+    # -- Load OGBench dataset ------------------------------------------------
     _, og_dataset, _ = ogbench.make_env_and_datasets(CONFIG["og_dataset_name"])
 
-    # Preprocessing step to get train/val data
+    # -- Preprocessing -------------------------------------------------------
     print(f'Sampling {CONFIG["num_states"]} states...')
-    data = sample_states(dataset=og_dataset, num_states=CONFIG["num_states"])
-    states = data["states"]
+    states = sample_states(dataset=og_dataset, num_states=CONFIG["num_states"])["states"]
     train, val = split_data(states, split_val=0.8)
     train_ds = StatesDataset(cl_model=cl_model, data=train)
     val_ds = StatesDataset(cl_model=cl_model, data=val)
     print("Sampling finished!")
 
+    # -- Loggers -------------------------------------------------------------
     wandb_logger = WandbLogger(
             project=PROJECT_NAME,
-            name=RUN_NAME,
-            save_dir=PROJECT_ROOT,
+            name=CONFIG["exp_name"],
+            save_dir=logs_dir,
             log_model=True,
             config=CONFIG)
+    csv_logger = CSVLogger(save_dir=logs_dir, name="beta_logs")
 
-    objective = ContrastiveHopfieldObjective(
-        temperature=CONFIG["temperature"],
-        masking_ratio=CONFIG["masking_ratio"],
-    )
+    # -- Objective -----------------------------------------------------------
+    if CONFIG["objective"] == "discriminative":
+        objective = DiscriminativeHopfieldObjective(masking_ratio=CONFIG["masking_ratio"])
+    else:
+        objective = ContrastiveHopfieldObjective(
+            temperature=CONFIG["temperature"],
+            masking_ratio=CONFIG["masking_ratio"],
+        )
 
+    # -- Train ---------------------------------------------------------------
     model = train_beta_model(
         bm_model=LearnedBetaModel,
         train_ds=train_ds,
         val_ds=val_ds,
         batch_size=CONFIG["minibatch"],
-        logger=wandb_logger,
-        checkpoint_path=checkpoint_path,
+        logger=[wandb_logger, csv_logger],
+        checkpoint_path=checkpoint_dir,
         max_epochs=CONFIG["max_epochs"],
         device=CONFIG["device"],
         filename=CONFIG["filename"],
@@ -125,6 +147,14 @@ def main():
         hopfield_scale=CONFIG["hopfield_scale"],
         hopfield_steps_max=CONFIG["hopfield_steps_max"],
         hopfield_steps_eps=CONFIG["hopfield_steps_eps"],
+    )
+
+    # -- Learning curve plot -------------------------------------------------
+    plot_learning_curve(
+        log_dir=logs_dir,
+        name="beta_logs",
+        title=f"Beta Model — Training Curve ({CONFIG['exp_name']})",
+        save_path=os.path.join(plots_dir, "beta_learning_curve.png"),
     )
 
 if __name__ == "__main__":

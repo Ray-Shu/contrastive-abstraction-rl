@@ -26,7 +26,7 @@ class BetaObjective(ABC, nn.Module):
         pass
 
 
-class ContrastiveHopfieldObjective(BetaObjective):
+class ContrastiveHopfieldObjective(BetaObjective): #TODO: this needs work
     """
     Current objective: InfoNCE between the Hopfield abstract state and a
     dropout-augmented version of the original z-representation.
@@ -105,6 +105,87 @@ class ContrastiveHopfieldObjective(BetaObjective):
             "U_norm_mean": torch.norm(u_norm, dim=1).mean().detach(),
             "U_norm_std": torch.norm(u_norm, dim=1).std().detach(),
             "U_norm_max": torch.norm(u_norm, dim=1).max().detach(),
+        }
+
+        return loss, metrics
+
+
+class DiscriminativeHopfieldObjective(BetaObjective):
+    """
+    Objective from minimo (arXiv:2410.00704 authors' codebase): a discriminative FNN
+    scores all N×N pairs of (Hopfield abstract state, masked z-representation)
+    and is trained with InfoNCE so that diagonal pairs (same sample) are
+    positive.
+
+    Positive pair for sample i:
+        anchor   = u_i  (Hopfield output for beta-scaled query i)
+        positive = masked_z_i  (z_i with a random binary keep-mask)
+
+    The discriminative FNN receives the concatenation [u_i, masked_z_j] for
+    every (i, j) pair and outputs a scalar logit.  The N×N logit matrix is
+    then trained with cross-entropy, labels = arange(N) (diagonal).
+
+    This differs from ContrastiveHopfieldObjective in that similarity is
+    learned by the FNN rather than computed geometrically.
+    """
+
+    def __init__(self, input_dim=32, fnn_hidden_dims=(256, 128),
+                 masking_ratio=0.3):
+        """
+        Args:
+            input_dim:        dimensionality of z (and u) representations.
+            fnn_hidden_dims:  hidden layer sizes for the discriminative FNN.
+            masking_ratio:    fraction of dimensions *dropped* in the binary
+                              mask applied to z to form the positive view.
+        """
+        super().__init__()
+        self.masking_ratio = masking_ratio
+
+        layers = []
+        in_dim = input_dim * 2
+        for h in fnn_hidden_dims:
+            layers += [nn.Linear(in_dim, h), nn.ReLU()]
+            in_dim = h
+        layers.append(nn.Linear(in_dim, 1))
+        self.fnn = nn.Sequential(*layers)
+
+    def loss(self, batch_norm, hopfield, beta):
+        N = batch_norm.size(0)
+
+        scaled_queries = batch_norm * beta  # [N, d]
+
+        u = hopfield((
+            batch_norm.unsqueeze(0),       # stored patterns [1, N, d]
+            scaled_queries.unsqueeze(0),   # queries          [1, N, d]
+            batch_norm.unsqueeze(0)        # values           [1, N, d]
+        )).squeeze(0)  # [N, d]
+
+        # binary keep-mask applied to z to form positive views
+        mask = (torch.rand(batch_norm.size(), device=batch_norm.device)
+                > self.masking_ratio)
+        masked_z = batch_norm * mask  # [N, d]
+
+        # build all-pairs input: [u_i, masked_z_j] for every (i, j)
+        u_expanded = u.unsqueeze(1).expand(N, N, -1)          # [N, N, d]
+        z_expanded = masked_z.unsqueeze(0).expand(N, N, -1)   # [N, N, d]
+        fnn_input = torch.cat([u_expanded, z_expanded], dim=2) \
+                         .view(N * N, -1)                      # [N*N, 2d]
+
+        logits = self.fnn(fnn_input).view(N, N)  # [N, N]
+
+        labels = torch.arange(N, device=logits.device)
+        loss = F.cross_entropy(logits, labels)
+
+        preds = logits.argmax(dim=1)
+        top1 = (preds == labels).float().mean()
+
+        metrics = {
+            "nll_loss": loss.detach(),
+            "top1": top1,
+            "logits_mean": logits.detach().mean(),
+            "logits_std": logits.detach().std(),
+            "beta_mean": beta.detach().mean(),
+            "beta_std": beta.detach().std(),
         }
 
         return loss, metrics

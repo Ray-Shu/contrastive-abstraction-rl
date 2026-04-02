@@ -29,7 +29,7 @@ from src.data.cl_dataset import DatasetCL
 from src.data.latent_dataset import StatesDataset
 from src.models.cl_model import mlpCL
 from src.models.beta_model import LearnedBetaModel
-from src.models.beta_objective import ContrastiveHopfieldObjective
+from src.models.beta_objective import DiscriminativeHopfieldObjective
 from src.trainers.cl_trainer import train_cl
 from src.trainers.beta_trainer import train_beta_model
 from src.utils.trajectory_io import ogbench_to_trajectory_set
@@ -50,7 +50,7 @@ CL_SUBSET_SIZE = 5_000
 NUM_STATES = 2_000
 
 # CL model
-CL_EPOCHS       = 3
+CL_EPOCHS       = 10
 CL_BATCH        = 256
 CL_LR           = 1e-3
 CL_WEIGHT_DECAY = 1e-5
@@ -59,7 +59,7 @@ CL_TRAIN_PAIRS  = 1_600
 CL_VAL_PAIRS    = 400
 
 # Beta model
-BETA_EPOCHS         = 3
+BETA_EPOCHS         = 10
 BETA_BATCH          = 256
 BETA_LR             = 1e-3
 BETA_WEIGHT_DECAY   = 1e-5
@@ -78,10 +78,7 @@ def make_subset(dataset: dict, n: int) -> dict:
 def train_beta(cl_model, states, checkpoint_path, logger, device,
                plot_save_path=None, plot_title="Beta Model — Training Curve"):
     """Train LearnedBetaModel on CL latents from the given states array."""
-    objective = ContrastiveHopfieldObjective(
-        temperature=BETA_TEMPERATURE,
-        masking_ratio=BETA_MASKING_RATIO,
-    )
+    objective = DiscriminativeHopfieldObjective(masking_ratio=BETA_MASKING_RATIO)
 
     train_states, val_states = split_data(states, split_val=0.8)
     train_ds = StatesDataset(cl_model=cl_model, data=train_states)
@@ -180,8 +177,9 @@ def visualize(cl_model, beta_model, states, og_dataset, plots_dir):
 
 def main():
     TESTS_DIR       = os.path.dirname(os.path.abspath(__file__))
-    CHECKPOINTS_DIR = os.path.join(TESTS_DIR, "checkpoints")
-    PLOTS_DIR       = os.path.join(TESTS_DIR, "plots")
+    RESULTS_DIR     = os.path.join(TESTS_DIR, ".test_results")
+    CHECKPOINTS_DIR = os.path.join(RESULTS_DIR, "checkpoints")
+    PLOTS_DIR       = os.path.join(RESULTS_DIR, "plots")
     os.makedirs(CHECKPOINTS_DIR, exist_ok=True)
     os.makedirs(PLOTS_DIR,       exist_ok=True)
 
@@ -211,7 +209,7 @@ def main():
             train_ds=train_ds,
             val_ds=val_ds,
             batch_size=CL_BATCH,
-            logger=CSVLogger(save_dir=TESTS_DIR, name="cl_logs"),
+            logger=CSVLogger(save_dir=RESULTS_DIR, name="cl_logs"),
             checkpoint_path=CHECKPOINTS_DIR,
             max_epochs=CL_EPOCHS,
             device=DEVICE,
@@ -229,10 +227,7 @@ def main():
     beta_ckpt = os.path.join(CHECKPOINTS_DIR, "best_beta_ogbench.ckpt")
     if os.path.exists(beta_ckpt):
         print(f"Reusing beta checkpoint: {beta_ckpt}")
-        objective = ContrastiveHopfieldObjective(
-            temperature=BETA_TEMPERATURE,
-            masking_ratio=BETA_MASKING_RATIO,
-        )
+        objective = DiscriminativeHopfieldObjective(masking_ratio=BETA_MASKING_RATIO)
         beta_model = LearnedBetaModel.load_from_checkpoint(beta_ckpt, objective=objective)
     else:
         print(f"Training beta model ({BETA_EPOCHS} epochs)...")
@@ -242,7 +237,7 @@ def main():
             cl_model=cl_model,
             states=states,
             checkpoint_path=CHECKPOINTS_DIR,
-            logger=CSVLogger(save_dir=TESTS_DIR, name="beta_logs"),
+            logger=CSVLogger(save_dir=RESULTS_DIR, name="beta_logs"),
             device=DEVICE,
             plot_save_path=os.path.join(PLOTS_DIR, "beta_learning_curve.png"),
             plot_title="Beta Model — Training Curve (OGBench)",
