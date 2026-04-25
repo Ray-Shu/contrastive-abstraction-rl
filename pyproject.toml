@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "contrastive-learning-rl"
 version = "0.1.0"
-requires-python = ">=3.10"
+requires-python = ">=3.10, <3.13"
 dependencies = [
     "torch>=2.5",
     "torchaudio>=2.5",
